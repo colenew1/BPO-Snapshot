@@ -124,22 +124,18 @@ export default async function handler(req, res) {
       // Don't fail the request if save fails
     }
     
-    // Add debug_info at the VERY END - simple version to avoid any serialization issues
+    // Add debug_info at the VERY END - preserve all existing fields and add timestamp
     try {
+      // Preserve all existing debug_info fields
+      const existingDebugInfo = snapshotData.debug_info && typeof snapshotData.debug_info === 'object' 
+        ? { ...snapshotData.debug_info } 
+        : {};
+      
       snapshotData.debug_info = {
+        ...existingDebugInfo,
         test_message: 'DEBUG_INFO_FORCE_ADDED_AT_END',
         added_at_end: true,
-        coaching_records_current: snapshotData.snapshot_metadata?.data_quality?.coaching_records_current || 0,
-        coaching_records_previous: snapshotData.snapshot_metadata?.data_quality?.coaching_records_previous || 0,
-        timestamp: new Date().toISOString(),
-        // Try to preserve existing debug_info if it exists and is simple
-        ...(snapshotData.debug_info && typeof snapshotData.debug_info === 'object' ? {
-          total_records_in_db: snapshotData.debug_info.total_records_in_db,
-          records_matching_org_year: snapshotData.debug_info.records_matching_org_year,
-          filter_breakdown: snapshotData.debug_info.filter_breakdown,
-          search_criteria: snapshotData.debug_info.search_criteria,
-          sample_db_record: snapshotData.debug_info.sample_db_record
-        } : {})
+        timestamp: new Date().toISOString()
       };
     } catch (debugError) {
       logger.error('Error adding debug_info:', debugError);

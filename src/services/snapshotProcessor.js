@@ -110,11 +110,13 @@ export async function processSnapshotData(params) {
   
   // Fetch behavioral coaching
   logger.info(`Fetching behavioral_coaching for org: ${params.organization}, year: ${params.year}`);
+  // Fetch ALL coaching records (Supabase defaults to 1000 limit, so we need to explicitly remove it)
   const { data: allBehavioralCoaching, error: coachingError } = await supabase
     .from('behavioral_coaching')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('amplifai_org', params.organization)
-    .eq('year', params.year);
+    .eq('year', params.year)
+    .limit(100000); // Set a high limit to get all records
   
   if (coachingError) {
     logger.error('Behavioral coaching query error:', coachingError);
