@@ -50,48 +50,6 @@ export async function processSnapshotData(params) {
   // Helper: Check if value is valid
   const isValid = (v) => v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
   
-  // Helper: Check if a metric name matches
-  // amplifai_metric is standardized, so use exact match
-  // metric field may have variations, so use flexible matching
-  const metricMatches = (amplifaiMetric, originalMetric, searchMetric) => {
-    if (!searchMetric) return false;
-    
-    // First priority: Check amplifai_metric (standardized field) - exact match
-    if (amplifaiMetric && amplifaiMetric === searchMetric) return true;
-    
-    // Case-insensitive match for amplifai_metric
-    if (amplifaiMetric && amplifaiMetric.toUpperCase() === searchMetric.toUpperCase()) return true;
-    
-    // Second priority: Check original metric field with variation matching (only if amplifai_metric is null/empty)
-    if (!amplifaiMetric && originalMetric) {
-      // Exact match
-      if (originalMetric === searchMetric) return true;
-      
-      // Case-insensitive match
-      if (originalMetric.toUpperCase() === searchMetric.toUpperCase()) return true;
-      
-      // Check if search metric is contained in original metric (e.g., "NPS" in "UES-NPS COMPOSITE SCORE")
-      if (originalMetric.toUpperCase().includes(searchMetric.toUpperCase())) return true;
-      
-      // Check standardized metric mappings for original metric field
-      const metricMappings = {
-        'NPS': ['NPS', 'CHAT NPS', 'IB NPS', 'NPS RATING', 'UES-NPS COMPOSITE SCORE'],
-        'AHT': ['AHT', 'AVERAGE HANDLE TIME', 'AVE HANDLE TIME'],
-        'QA': ['QA', 'QUALITY', 'QA SCORE', 'QUALITY SCORE'],
-        'CSAT': ['CSAT', 'C-SAT', 'CSAT%'],
-        'FCR': ['FCR', 'FIRST CALL RESOLUTION', 'FCR36'],
-        'TRANSFER_RATE': ['TRANSFER RATE', 'TRANSFER%', 'TRANSFERS'],
-        'ATTENDANCE': ['ATTENDANCE', 'ATTENDANCE %', 'RELIABILITY'],
-        'RELEASE_RATE': ['RELEASE RATE', 'RELEASE %']
-      };
-      
-      const variations = metricMappings[searchMetric] || [searchMetric];
-      return variations.some(v => originalMetric.toUpperCase().includes(v.toUpperCase()));
-    }
-    
-    return false;
-  };
-  
   // Fetch monthly metrics
   const { data: allMonthlyMetrics, error: metricsError } = await supabase
     .from('monthly_metrics')
@@ -154,9 +112,9 @@ export async function processSnapshotData(params) {
     // Check how many match each filter
     const clientMatches = allBehavioralCoaching.filter(r => params.clients.includes(r.client)).length;
     const orgMatches = allBehavioralCoaching.filter(r => r.amplifai_org === params.organization).length;
-    // Check both amplifai_metric and metric fields for matching (with metric name variations)
+    // Check amplifai_metric exact match (standardized field)
     const metricMatchesCount = allBehavioralCoaching.filter(r => 
-      metricMatches(r.amplifai_metric, r.metric, params.metric_name)
+      r.amplifai_metric === params.metric_name
     ).length;
     const monthMatches = allBehavioralCoaching.filter(r => currentCoachingPeriod.includes(r.month)).length;
     
