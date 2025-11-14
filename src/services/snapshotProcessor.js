@@ -109,22 +109,50 @@ export async function processSnapshotData(params) {
   logger.info(`Table access test: Found ${testCount || 0} total records in behavioral_coaching table`);
   
   // Fetch behavioral coaching
-  // IMPORTANT: Don't filter by org at database level - fetch all records for the year
-  // Then filter in JavaScript. This ensures we get all months, not just the first 1000
+  // IMPORTANT: Use pagination to get ALL records - Supabase may still limit even with high limit
+  // Fetch all records for the year, then filter by org in JavaScript
   logger.info(`Fetching ALL behavioral_coaching for year: ${params.year} (will filter by org in JavaScript)`);
-  const { data: allBehavioralCoaching, error: coachingError } = await supabase
-    .from('behavioral_coaching')
-    .select('*', { count: 'exact' })
-    .eq('year', params.year)
-    .limit(100000); // Set a high limit to get all records
   
-  if (coachingError) {
-    logger.error('Behavioral coaching query error:', coachingError);
-    logger.error('Error details:', JSON.stringify(coachingError, null, 2));
-    throw new Error(`Failed to fetch coaching data: ${coachingError.message} (code: ${coachingError.code}, hint: ${coachingError.hint || 'none'})`);
+  let allBehavioralCoaching = [];
+  let from = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+  
+  while (hasMore) {
+    const { data: pageData, error: coachingError, count } = await supabase
+      .from('behavioral_coaching')
+      .select('*', { count: 'exact' })
+      .eq('year', params.year)
+      .range(from, from + pageSize - 1)
+      .order('month', { ascending: false }) // Order by month descending to get mix of months
+      .order('id', { ascending: true }); // Secondary sort for consistency
+    
+    if (coachingError) {
+      logger.error('Behavioral coaching query error:', coachingError);
+      logger.error('Error details:', JSON.stringify(coachingError, null, 2));
+      throw new Error(`Failed to fetch coaching data: ${coachingError.message} (code: ${coachingError.code}, hint: ${coachingError.hint || 'none'})`);
+    }
+    
+    if (pageData && pageData.length > 0) {
+      allBehavioralCoaching = allBehavioralCoaching.concat(pageData);
+      from += pageSize;
+      hasMore = pageData.length === pageSize; // If we got a full page, there might be more
+      logger.info(`Fetched ${allBehavioralCoaching.length} records so far (page size: ${pageData.length}, total available: ${count || 'unknown'})`);
+    } else {
+      hasMore = false;
+    }
   }
   
-  logger.info(`Fetched ${allBehavioralCoaching?.length || 0} total coaching records for ${params.organization} in ${params.year}`);
+  logger.info(`Fetched ${allBehavioralCoaching.length} total coaching records for year ${params.year}`);
+  
+  // Now filter by organization in JavaScript
+  const orgFilteredCoaching = allBehavioralCoaching.filter(r => 
+    normalizeString(r.amplifai_org) === normalizeString(params.organization)
+  );
+  logger.info(`After filtering by org "${params.organization}": ${orgFilteredCoaching.length} records`);
+  
+  // Use the filtered data
+  allBehavioralCoaching = orgFilteredCoaching;
   
   // If no data returned, check if it's an RLS/permissions issue
   if ((!allMonthlyMetrics || allMonthlyMetrics.length === 0) && (!allBehavioralCoaching || allBehavioralCoaching.length === 0)) {
