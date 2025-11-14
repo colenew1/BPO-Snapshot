@@ -331,6 +331,16 @@ export async function processSnapshotData(params) {
   
   logger.info(`Top behaviors: ${topBehaviors.length} behaviors with ${currentSessions} total sessions`);
   
+  // Log the structure being created
+  if (topBehaviors.length > 0) {
+    logger.info('Sample top behavior structure:', JSON.stringify(topBehaviors[0], null, 2));
+  } else {
+    logger.warn('No top behaviors found! Current coaching records:', currentCoaching.length);
+    if (currentCoaching.length > 0) {
+      logger.warn('Sample current coaching record:', JSON.stringify(currentCoaching[0], null, 2));
+    }
+  }
+  
   // Top behaviors for previous period WITH SUB-BEHAVIORS
   const prevBehaviorCounts = {};
   previousCoaching.forEach(item => {
@@ -351,7 +361,7 @@ export async function processSnapshotData(params) {
     }));
   
   // Build output matching n8n format exactly
-  return {
+  const result = {
     snapshot_metadata: {
       clients: params.clients.join(', '),
       organization: params.organization,
@@ -404,5 +414,21 @@ export async function processSnapshotData(params) {
       }
     }
   };
+  
+  // Log final output structure for debugging
+  logger.info('Final output summary:', {
+    coaching_activity_exists: !!result.coaching_activity,
+    current_sessions: result.coaching_activity.current.total_coaching_sessions,
+    current_behaviors_count: result.coaching_activity.current.top_behaviors.length,
+    previous_sessions: result.coaching_activity.previous.total_coaching_sessions,
+    previous_behaviors_count: result.coaching_activity.previous.top_behaviors.length,
+    current_behaviors_sample: result.coaching_activity.current.top_behaviors[0] ? {
+      behavior: result.coaching_activity.current.top_behaviors[0].behavior,
+      sessions: result.coaching_activity.current.top_behaviors[0].sessions,
+      sub_behaviors_count: result.coaching_activity.current.top_behaviors[0].sub_behaviors?.length || 0
+    } : null
+  });
+  
+  return result;
 }
 

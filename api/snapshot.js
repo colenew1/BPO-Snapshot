@@ -87,6 +87,16 @@ export default async function handler(req, res) {
     // Process data (replicates "Parse Data" node)
     const snapshotData = await processSnapshotData(params);
     
+    // Log what we're about to send to frontend
+    logger.info('Snapshot data prepared for response:', {
+      has_coaching_activity: !!snapshotData.coaching_activity,
+      current_sessions: snapshotData.coaching_activity?.current?.total_coaching_sessions || 0,
+      current_behaviors: snapshotData.coaching_activity?.current?.top_behaviors?.length || 0,
+      previous_sessions: snapshotData.coaching_activity?.previous?.total_coaching_sessions || 0,
+      previous_behaviors: snapshotData.coaching_activity?.previous?.top_behaviors?.length || 0,
+      current_behaviors_sample: snapshotData.coaching_activity?.current?.top_behaviors?.[0]?.behavior || 'none'
+    });
+    
     // Generate AI summary (replicates "AI Summary" node)
     const aiSummary = await generateAISummary(snapshotData);
     snapshotData.ai_summary = aiSummary;
