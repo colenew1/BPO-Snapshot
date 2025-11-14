@@ -280,6 +280,8 @@ export async function processSnapshotData(params) {
   
   // Filter coaching for SHIFTED current period
   // Use flexible matching: case-insensitive, trimmed, with fallback to metric field
+  logger.info(`Filtering current coaching - Looking for: clients=${params.clients.join(',')}, org=${params.organization}, metric=${params.metric_name}, months=${currentCoachingPeriod.join(',')}, year=${params.year}`);
+  
   const currentCoaching = (allBehavioralCoaching || []).filter(item => {
     const clientMatch = params.clients.includes(item.client);
     const orgMatch = normalizeString(item.amplifai_org) === normalizeString(params.organization);
@@ -307,6 +309,11 @@ export async function processSnapshotData(params) {
       monthMatch = true;
     }
     const yearMatch = item.year === params.year;
+    
+    // Log why records are being filtered out
+    if (!monthMatch && clientMatch && orgMatch && metricMatch && yearMatch) {
+      logger.debug(`Record filtered out by month - Record: client=${item.client}, month=${item.month}, looking for months=${currentCoachingPeriod.join(',')}`);
+    }
     
     // Debug individual filter failures
     if (!clientMatch && orgMatch && metricMatch && monthMatch && yearMatch) {
@@ -344,6 +351,7 @@ export async function processSnapshotData(params) {
   
   if (currentCoaching.length === 0 && allBehavioralCoaching && allBehavioralCoaching.length > 0) {
     logger.warn('No coaching records matched filters! Check the debug logs above for mismatch reasons.');
+    
     // Show what months are available in the database for this org/year/metric
     const availableMonthsForMetric = [...new Set(allBehavioralCoaching
       .filter(r => {
@@ -356,6 +364,22 @@ export async function processSnapshotData(params) {
       .map(r => r.month))];
     logger.warn(`Available months in DB for ${params.organization}/${params.metric_name}/${params.year}: ${availableMonthsForMetric.sort().join(', ')}`);
     logger.warn(`Looking for months: ${currentCoachingPeriod.join(', ')} (normalized: ${normalizedCurrentCoachingPeriod.join(', ')})`);
+    
+    // Show sample records that match org/year/metric but not month
+    const matchingRecords = allBehavioralCoaching.filter(r => {
+      const clientMatch = params.clients.includes(r.client);
+      const orgMatch = normalizeString(r.amplifai_org) === normalizeString(params.organization);
+      const yearMatch = r.year === params.year;
+      const amplifaiMetricMatch = normalizeString(r.amplifai_metric) === normalizedMetricName;
+      const metricFieldMatch = normalizeString(r.metric) === normalizedMetricName;
+      return clientMatch && orgMatch && yearMatch && (amplifaiMetricMatch || metricFieldMatch);
+    });
+    
+    if (matchingRecords.length > 0) {
+      const monthsInMatchingRecords = [...new Set(matchingRecords.map(r => r.month))];
+      logger.warn(`Found ${matchingRecords.length} records matching org/year/metric, but with months: ${monthsInMatchingRecords.sort().join(', ')}`);
+      logger.warn(`Sample matching record: client=${matchingRecords[0].client}, month=${matchingRecords[0].month}, amplifai_metric=${matchingRecords[0].amplifai_metric}, metric=${matchingRecords[0].metric}`);
+    }
   }
   
   // Filter coaching for SHIFTED previous period
