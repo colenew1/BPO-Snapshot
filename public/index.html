@@ -804,11 +804,41 @@
                 });
                 
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+                    // Check if response is JSON or HTML
+                    const contentType = response.headers.get('content-type') || '';
+                    let errorMessage = `HTTP error! status: ${response.status}`;
+                    
+                    if (contentType.includes('application/json')) {
+                        try {
+                            const errorData = await response.json();
+                            errorMessage = errorData.message || errorData.error || errorMessage;
+                        } catch (e) {
+                            // If JSON parsing fails, use default message
+                        }
+                    } else {
+                        // If it's HTML (like a Vercel error page), get text instead
+                        try {
+                            const errorText = await response.text();
+                            errorMessage = `Server error (${response.status}). The API endpoint may not be configured correctly.`;
+                            console.error('Server returned HTML error page. Check Vercel function logs.');
+                            console.error('Response preview:', errorText.substring(0, 300));
+                        } catch (e) {
+                            // If text parsing fails, use default message
+                        }
+                    }
+                    
+                    throw new Error(errorMessage);
                 }
                 
-                const data = await response.json();
+                let data;
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    console.error('Failed to parse JSON response:', parseError);
+                    const responseText = await response.text();
+                    console.error('Response was:', responseText.substring(0, 500));
+                    throw new Error('Server returned invalid JSON. Check console and Vercel logs for details.');
+                }
                 lastResponse = data;
                 
                 // Display results

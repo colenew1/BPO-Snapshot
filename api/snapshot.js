@@ -26,6 +26,15 @@ export default async function handler(req, res) {
   }
   
   try {
+    // Check for required environment variables
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
+      console.error('Missing Supabase credentials');
+      return res.status(500).json({ 
+        error: 'Server configuration error',
+        message: 'Missing database credentials. Please check environment variables.'
+      });
+    }
+    
     // Parse request body
     let body;
     try {
