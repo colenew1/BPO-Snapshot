@@ -1,0 +1,32 @@
+{
+  "name": "amplifai-story-generator",
+  "version": "1.0.0",
+  "description": "Generates customer success stories from contact center performance data",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "amplifai",
+    "story-generator",
+    "customer-success"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "axios": "^1.6.5",
+    "dotenv": "^16.3.1",
+    "openai": "^4.20.0"
+  },
+  "devDependencies": {
+    "node-cron": "^3.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+

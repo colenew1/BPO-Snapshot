@@ -1,0 +1,20 @@
+{
+  "functions": {
+    "api/generate-stories.js": {
+      "maxDuration": 60
+    },
+    "api/snapshot.js": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/public/index.html"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
+

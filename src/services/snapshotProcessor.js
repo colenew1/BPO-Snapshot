@@ -1,0 +1,272 @@
+import { supabase } from '../config/database.js';
+import { logger } from '../utils/logger.js';
+
+/**
+ * Replicates the "Parse Data" logic from n8n workflow
+ * This is the core calculation logic that must match exactly
+ */
+export async function processSnapshotData(params) {
+  logger.info('Processing snapshot data', params);
+  
+  // Determine periods
+  let currentPeriod, previousPeriod;
+  if (params.comparison_type === 'month') {
+    currentPeriod = [params.current_month];
+    previousPeriod = [params.previous_month];
+  } else {
+    // Quarter mapping
+    const quarterMonths = {
+      'Q1': ['Jan', 'Feb', 'Mar'],
+      'Q2': ['Apr', 'May', 'Jun'],
+      'Q3': ['Jul', 'Aug', 'Sep'],
+      'Q4': ['Oct', 'Nov', 'Dec']
+    };
+    currentPeriod = quarterMonths[params.current_quarter];
+    previousPeriod = quarterMonths[params.previous_quarter];
+  }
+  
+  // Month shifting logic for coaching (coaching is from previous period)
+  const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  
+  const shiftMonthBack = (month) => {
+    const idx = monthOrder.indexOf(month);
+    return idx > 0 ? monthOrder[idx - 1] : monthOrder[11];
+  };
+  
+  // Shift coaching periods back by 1 month
+  let currentCoachingPeriod, previousCoachingPeriod;
+  
+  if (params.comparison_type === 'month') {
+    currentCoachingPeriod = currentPeriod.map(shiftMonthBack);
+    previousCoachingPeriod = previousPeriod.map(shiftMonthBack);
+  } else {
+    currentCoachingPeriod = previousPeriod;
+    previousCoachingPeriod = previousPeriod.map(m => {
+      const idx = monthOrder.indexOf(m);
+      return monthOrder[(idx - 3 + 12) % 12];
+    });
+  }
+  
+  // Helper: Check if value is valid
+  const isValid = (v) => v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
+  
+  // Fetch monthly metrics
+  const { data: allMonthlyMetrics, error: metricsError } = await supabase
+    .from('monthly_metrics')
+    .select('*')
+    .eq('amplifai_org', params.organization)
+    .eq('year', params.year);
+  
+  if (metricsError) {
+    throw new Error(`Failed to fetch monthly metrics: ${metricsError.message}`);
+  }
+  
+  // Fetch behavioral coaching
+  const { data: allBehavioralCoaching, error: coachingError } = await supabase
+    .from('behavioral_coaching')
+    .select('*')
+    .eq('amplifai_org', params.organization)
+    .eq('year', params.year);
+  
+  if (coachingError) {
+    throw new Error(`Failed to fetch coaching data: ${coachingError.message}`);
+  }
+  
+  // Filter metrics for current period
+  const currentMetrics = (allMonthlyMetrics || []).filter(item => {
+    return params.clients.includes(item.client) &&
+           item.amplifai_org === params.organization &&
+           item.amplifai_metric === params.metric_name &&
+           currentPeriod.includes(item.month) &&
+           item.year === params.year;
+  });
+  
+  // Filter metrics for previous period
+  const previousMetrics = (allMonthlyMetrics || []).filter(item => {
+    return params.clients.includes(item.client) &&
+           item.amplifai_org === params.organization &&
+           item.amplifai_metric === params.metric_name &&
+           previousPeriod.includes(item.month) &&
+           item.year === params.year;
+  });
+  
+  // Calculate metric averages
+  const currentValues = currentMetrics.map(item => item.actual).filter(isValid).map(Number);
+  const previousValues = previousMetrics.map(item => item.actual).filter(isValid).map(Number);
+  
+  const currentAvg = currentValues.length > 0 ? currentValues.reduce((a, b) => a + b, 0) / currentValues.length : null;
+  const previousAvg = previousValues.length > 0 ? previousValues.reduce((a, b) => a + b, 0) / previousValues.length : null;
+  
+  const change = (currentAvg !== null && previousAvg !== null) ? currentAvg - previousAvg : null;
+  const percentChange = (change !== null && previousAvg !== 0) ? ((change / previousAvg) * 100).toFixed(2) : null;
+  
+  // Get unique programs
+  const programsCount = new Set(currentMetrics.map(item => item.program)).size;
+  
+  // Filter coaching for SHIFTED current period
+  const currentCoaching = (allBehavioralCoaching || []).filter(item => {
+    return params.clients.includes(item.client) &&
+           item.amplifai_org === params.organization &&
+           item.amplifai_metric === params.metric_name &&
+           currentCoachingPeriod.includes(item.month) &&
+           item.year === params.year;
+  });
+  
+  // Filter coaching for SHIFTED previous period
+  const previousCoaching = (allBehavioralCoaching || []).filter(item => {
+    return params.clients.includes(item.client) &&
+           item.amplifai_org === params.organization &&
+           item.amplifai_metric === params.metric_name &&
+           previousCoachingPeriod.includes(item.month) &&
+           item.year === params.year;
+  });
+  
+  // Calculate coaching summaries
+  const currentSessions = currentCoaching.reduce((sum, item) => sum + (item.coaching_count || 0), 0);
+  const previousSessions = previousCoaching.reduce((sum, item) => sum + (item.coaching_count || 0), 0);
+  
+  // Only average rows with non-NULL effectiveness
+  const currentCoachingWithEffectiveness = currentCoaching.filter(item => 
+    item.effectiveness_pct !== null && 
+    item.effectiveness_pct !== undefined
+  );
+  
+  const currentEffectiveness = currentCoachingWithEffectiveness.length > 0
+    ? currentCoachingWithEffectiveness.reduce((sum, item) => sum + item.effectiveness_pct, 0) / currentCoachingWithEffectiveness.length
+    : null;
+  
+  const previousCoachingWithEffectiveness = previousCoaching.filter(item => 
+    item.effectiveness_pct !== null && 
+    item.effectiveness_pct !== undefined
+  );
+  
+  const previousEffectiveness = previousCoachingWithEffectiveness.length > 0
+    ? previousCoachingWithEffectiveness.reduce((sum, item) => sum + item.effectiveness_pct, 0) / previousCoachingWithEffectiveness.length
+    : null;
+  
+  // Helper function to get sub-behaviors for a behavior
+  const getSubBehaviors = (coachingData, behaviorName) => {
+    const subBehaviorCounts = {};
+    let totalForBehavior = 0;
+    
+    // First pass: count all sessions for this behavior
+    coachingData
+      .filter(item => item.behavior === behaviorName)
+      .forEach(item => {
+        totalForBehavior += (item.coaching_count || 0);
+      });
+    
+    // Second pass: count by sub-behavior
+    coachingData
+      .filter(item => item.behavior === behaviorName && item.sub_behavior)
+      .forEach(item => {
+        const subBehavior = item.sub_behavior;
+        const count = item.coaching_count || 0;
+        subBehaviorCounts[subBehavior] = (subBehaviorCounts[subBehavior] || 0) + count;
+      });
+    
+    // Sort and return top 3
+    return Object.entries(subBehaviorCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([subBehavior, count]) => ({
+        name: subBehavior,
+        sessions: count,
+        percent: totalForBehavior > 0 ? ((count / totalForBehavior) * 100).toFixed(1) + '%' : '0%'
+      }));
+  };
+  
+  // Top behaviors for current period WITH SUB-BEHAVIORS
+  const behaviorCounts = {};
+  currentCoaching.forEach(item => {
+    const behavior = item.behavior;
+    if (behavior) {
+      behaviorCounts[behavior] = (behaviorCounts[behavior] || 0) + (item.coaching_count || 0);
+    }
+  });
+  
+  const topBehaviors = Object.entries(behaviorCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([behavior, count]) => ({
+      behavior,
+      sessions: count,
+      percent_of_total: currentSessions > 0 ? ((count / currentSessions) * 100).toFixed(1) + '%' : '0%',
+      sub_behaviors: getSubBehaviors(currentCoaching, behavior)
+    }));
+  
+  // Top behaviors for previous period WITH SUB-BEHAVIORS
+  const prevBehaviorCounts = {};
+  previousCoaching.forEach(item => {
+    const behavior = item.behavior;
+    if (behavior) {
+      prevBehaviorCounts[behavior] = (prevBehaviorCounts[behavior] || 0) + (item.coaching_count || 0);
+    }
+  });
+  
+  const prevTopBehaviors = Object.entries(prevBehaviorCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([behavior, count]) => ({
+      behavior,
+      sessions: count,
+      percent_of_total: previousSessions > 0 ? ((count / previousSessions) * 100).toFixed(1) + '%' : '0%',
+      sub_behaviors: getSubBehaviors(previousCoaching, behavior)
+    }));
+  
+  // Build output matching n8n format exactly
+  return {
+    snapshot_metadata: {
+      clients: params.clients.join(', '),
+      organization: params.organization,
+      metric: params.metric_name,
+      comparison: {
+        current_period: currentPeriod.join(', ') + ' ' + params.year,
+        previous_period: previousPeriod.join(', ') + ' ' + params.year,
+        current_value: currentAvg !== null ? currentAvg.toFixed(2) : 'N/A',
+        previous_value: previousAvg !== null ? previousAvg.toFixed(2) : 'N/A',
+        change: change !== null ? change.toFixed(2) : 'N/A',
+        percent_change: percentChange !== null ? percentChange + '%' : 'N/A'
+      },
+      programs_count: programsCount,
+      data_quality: {
+        metric_data_points_current: currentMetrics.length,
+        metric_data_points_previous: previousMetrics.length,
+        total_metric_data_points: currentMetrics.length + previousMetrics.length,
+        coaching_records_current: currentCoaching.length,
+        coaching_records_previous: previousCoaching.length,
+        total_coaching_records: currentCoaching.length + previousCoaching.length,
+        coaching_effectiveness_coverage_current: currentCoachingWithEffectiveness.length + ' of ' + currentCoaching.length,
+        coaching_effectiveness_coverage_previous: previousCoachingWithEffectiveness.length + ' of ' + previousCoaching.length
+      }
+    },
+    coaching_activity: {
+      current: {
+        period_label: currentCoachingPeriod.join(', '),
+        total_coaching_sessions: currentSessions,
+        coaching_effectiveness: currentEffectiveness !== null 
+          ? (currentEffectiveness * 100).toFixed(2) + '% (based on ' + currentCoachingWithEffectiveness.length + ' of ' + currentCoaching.length + ' sessions)'
+          : 'No effectiveness data',
+        top_behaviors: topBehaviors
+      },
+      previous: {
+        period_label: previousCoachingPeriod.join(', '),
+        total_coaching_sessions: previousSessions,
+        coaching_effectiveness: previousEffectiveness !== null 
+          ? (previousEffectiveness * 100).toFixed(2) + '% (based on ' + previousCoachingWithEffectiveness.length + ' of ' + previousCoaching.length + ' sessions)'
+          : 'No effectiveness data',
+        top_behaviors: prevTopBehaviors
+      },
+      change: {
+        coaching_volume_change: currentSessions - previousSessions,
+        coaching_volume_change_pct: previousSessions > 0
+          ? (((currentSessions - previousSessions) / previousSessions) * 100).toFixed(1) + '%'
+          : 'N/A',
+        effectiveness_change: currentEffectiveness !== null && previousEffectiveness !== null
+          ? ((currentEffectiveness - previousEffectiveness) * 100).toFixed(2) + ' points'
+          : 'N/A'
+      }
+    }
+  };
+}
+
