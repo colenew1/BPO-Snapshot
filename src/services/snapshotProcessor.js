@@ -65,6 +65,20 @@ export async function processSnapshotData(params) {
   
   logger.info(`Fetched ${allMonthlyMetrics?.length || 0} monthly metrics records`);
   
+  // First, test if we can access the behavioral_coaching table at all
+  logger.info('Testing access to behavioral_coaching table...');
+  const { data: testData, error: testError, count: testCount } = await supabase
+    .from('behavioral_coaching')
+    .select('*', { count: 'exact', head: true });
+  
+  if (testError) {
+    logger.error('Cannot access behavioral_coaching table:', testError);
+    logger.error('Error details:', JSON.stringify(testError, null, 2));
+    throw new Error(`Cannot access behavioral_coaching table: ${testError.message} (code: ${testError.code}, hint: ${testError.hint || 'none'})`);
+  }
+  
+  logger.info(`Table access test: Found ${testCount || 0} total records in behavioral_coaching table`);
+  
   // Fetch behavioral coaching
   logger.info(`Fetching behavioral_coaching for org: ${params.organization}, year: ${params.year}`);
   const { data: allBehavioralCoaching, error: coachingError } = await supabase
@@ -75,7 +89,8 @@ export async function processSnapshotData(params) {
   
   if (coachingError) {
     logger.error('Behavioral coaching query error:', coachingError);
-    throw new Error(`Failed to fetch coaching data: ${coachingError.message} (code: ${coachingError.code})`);
+    logger.error('Error details:', JSON.stringify(coachingError, null, 2));
+    throw new Error(`Failed to fetch coaching data: ${coachingError.message} (code: ${coachingError.code}, hint: ${coachingError.hint || 'none'})`);
   }
   
   logger.info(`Fetched ${allBehavioralCoaching?.length || 0} total coaching records for ${params.organization} in ${params.year}`);
