@@ -922,6 +922,13 @@
         
         function displayResults(data) {
             console.log('Full API Response:', data);
+            console.log('Coaching Activity Data:', {
+                current: data.coaching_activity?.current,
+                previous: data.coaching_activity?.previous,
+                change: data.coaching_activity?.change
+            });
+            console.log('Top Behaviors Current:', data.coaching_activity?.current?.top_behaviors);
+            console.log('Top Behaviors Previous:', data.coaching_activity?.previous?.top_behaviors);
             
             // Handle array response (from n8n webhook)
             if (Array.isArray(data) && data.length > 0) {
@@ -1053,13 +1060,19 @@
             `;
             
             // Top Behaviors Card
+            const currentBehaviors = data.coaching_activity?.current?.top_behaviors || [];
+            const previousBehaviors = data.coaching_activity?.previous?.top_behaviors || [];
+            
             html += `
                 <div class="card">
                     <div class="card-header">
                         <h3 class="card-title">Top Coaching Behaviors</h3>
                     </div>
                     <div id="behaviors-container">
-                        ${generateBehaviorsSection(data.coaching_activity?.current?.top_behaviors || [], data.coaching_activity?.previous?.top_behaviors || [])}
+                        ${currentBehaviors.length > 0 || previousBehaviors.length > 0 
+                            ? generateBehaviorsSection(currentBehaviors, previousBehaviors)
+                            : '<div class="no-data"><div class="no-data-icon">📊</div><p>No coaching behavior data available for the selected periods.</p></div>'
+                        }
                     </div>
                 </div>
             `;

@@ -72,6 +72,8 @@ export async function processSnapshotData(params) {
     throw new Error(`Failed to fetch coaching data: ${coachingError.message}`);
   }
   
+  logger.info(`Fetched ${allBehavioralCoaching?.length || 0} total coaching records for ${params.organization} in ${params.year}`);
+  
   // Filter metrics for current period
   const currentMetrics = (allMonthlyMetrics || []).filter(item => {
     return params.clients.includes(item.client) &&
@@ -112,6 +114,15 @@ export async function processSnapshotData(params) {
            item.year === params.year;
   });
   
+  logger.info(`Current coaching period: ${currentCoachingPeriod.join(', ')}, found ${currentCoaching.length} records`);
+  logger.debug('Current coaching filter:', {
+    clients: params.clients,
+    organization: params.organization,
+    metric: params.metric_name,
+    months: currentCoachingPeriod,
+    year: params.year
+  });
+  
   // Filter coaching for SHIFTED previous period
   const previousCoaching = (allBehavioralCoaching || []).filter(item => {
     return params.clients.includes(item.client) &&
@@ -120,6 +131,8 @@ export async function processSnapshotData(params) {
            previousCoachingPeriod.includes(item.month) &&
            item.year === params.year;
   });
+  
+  logger.info(`Previous coaching period: ${previousCoachingPeriod.join(', ')}, found ${previousCoaching.length} records`);
   
   // Calculate coaching summaries
   const currentSessions = currentCoaching.reduce((sum, item) => sum + (item.coaching_count || 0), 0);
@@ -185,6 +198,8 @@ export async function processSnapshotData(params) {
     }
   });
   
+  logger.info(`Found ${Object.keys(behaviorCounts).length} unique behaviors in current period`);
+  
   const topBehaviors = Object.entries(behaviorCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
@@ -194,6 +209,8 @@ export async function processSnapshotData(params) {
       percent_of_total: currentSessions > 0 ? ((count / currentSessions) * 100).toFixed(1) + '%' : '0%',
       sub_behaviors: getSubBehaviors(currentCoaching, behavior)
     }));
+  
+  logger.info(`Top behaviors: ${topBehaviors.length} behaviors with ${currentSessions} total sessions`);
   
   // Top behaviors for previous period WITH SUB-BEHAVIORS
   const prevBehaviorCounts = {};
