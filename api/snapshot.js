@@ -107,9 +107,18 @@ export default async function handler(req, res) {
     await saveSnapshot(snapshotData, params);
     
     // Add debug_info at the VERY END so nothing can remove it
-    // Preserve existing debug_info if it exists, otherwise create basic one
+    // Create a safe copy of existing debug_info to avoid circular reference issues
     try {
-      const existingDebugInfo = snapshotData.debug_info || {};
+      let existingDebugInfo = {};
+      if (snapshotData.debug_info) {
+        try {
+          // Safely copy only serializable properties
+          existingDebugInfo = JSON.parse(JSON.stringify(snapshotData.debug_info));
+        } catch (e) {
+          // If it can't be serialized, just use empty object
+          logger.warn('Could not serialize existing debug_info, using empty object');
+        }
+      }
       
       snapshotData.debug_info = {
         ...existingDebugInfo,
@@ -121,7 +130,6 @@ export default async function handler(req, res) {
       };
       
       logger.info('Final response - has_debug_info:', !!snapshotData.debug_info);
-      logger.info('Final response keys:', Object.keys(snapshotData));
     } catch (debugError) {
       logger.error('Error adding debug_info:', debugError);
       // Don't fail the request if debug_info fails
