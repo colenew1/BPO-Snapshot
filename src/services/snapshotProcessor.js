@@ -699,6 +699,31 @@ export async function processSnapshotData(params) {
     } : null
   });
   
+  // Add debug info to response (only in development or if no data found)
+  if (result.coaching_activity.current.total_coaching_sessions === 0 || process.env.NODE_ENV === 'development') {
+    result.debug_info = {
+      total_records_in_db: allBehavioralCoaching?.length || 0,
+      records_matching_org_year: orgYearMatches || 0,
+      filter_breakdown: {
+        client_matches: clientMatches || 0,
+        org_matches: orgMatches || 0,
+        metric_matches: metricMatches || 0,
+        month_matches: monthMatches || 0,
+        year_matches: yearMatches || 0
+      },
+      search_criteria: {
+        clients: params.clients,
+        organization: params.organization,
+        metric_name: params.metric_name,
+        current_coaching_months: currentCoachingPeriod,
+        previous_coaching_months: previousCoachingPeriod,
+        year: params.year
+      },
+      current_coaching_records: currentCoaching.length,
+      previous_coaching_records: previousCoaching.length
+    };
+  }
+  
   return result;
 }
 
