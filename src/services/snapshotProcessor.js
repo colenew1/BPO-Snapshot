@@ -372,6 +372,7 @@ export async function processSnapshotData(params) {
   const previousCoaching = (allBehavioralCoaching || []).filter(item => {
     const clientMatch = params.clients.includes(item.client);
     const orgMatch = normalizeString(item.amplifai_org) === normalizeString(params.organization);
+    const yearMatch = item.year === params.year;
     
     // Try amplifai_metric first (standardized), then fallback to metric field
     const amplifaiMetricMatch = normalizeString(item.amplifai_metric) === normalizedMetricName;
@@ -395,7 +396,6 @@ export async function processSnapshotData(params) {
     } else {
       monthMatch = true;
     }
-    const yearMatch = item.year === params.year;
     
     return clientMatch && orgMatch && metricMatch && monthMatch && yearMatch;
   });
