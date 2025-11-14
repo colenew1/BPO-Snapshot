@@ -50,6 +50,33 @@ export async function processSnapshotData(params) {
   // Helper: Check if value is valid
   const isValid = (v) => v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
   
+  // Helper function for flexible matching
+  const normalizeString = (str) => {
+    if (!str) return '';
+    return String(str).trim().toUpperCase();
+  };
+  
+  // Normalize month names (handle "Jun" vs "June", etc.)
+  const normalizeMonth = (month) => {
+    if (!month) return '';
+    const m = String(month).trim();
+    const monthMap = {
+      'JAN': 'JAN', 'JANUARY': 'JAN',
+      'FEB': 'FEB', 'FEBRUARY': 'FEB',
+      'MAR': 'MAR', 'MARCH': 'MAR',
+      'APR': 'APR', 'APRIL': 'APR',
+      'MAY': 'MAY',
+      'JUN': 'JUN', 'JUNE': 'JUN',
+      'JUL': 'JUL', 'JULY': 'JUL',
+      'AUG': 'AUG', 'AUGUST': 'AUG',
+      'SEP': 'SEP', 'SEPTEMBER': 'SEP',
+      'OCT': 'OCT', 'OCTOBER': 'OCT',
+      'NOV': 'NOV', 'NOVEMBER': 'NOV',
+      'DEC': 'DEC', 'DECEMBER': 'DEC'
+    };
+    return monthMap[m.toUpperCase()] || m.toUpperCase();
+  };
+  
   // Fetch monthly metrics
   logger.info(`Fetching monthly_metrics for org: ${params.organization}, year: ${params.year}`);
   const { data: allMonthlyMetrics, error: metricsError } = await supabase
@@ -139,14 +166,22 @@ export async function processSnapshotData(params) {
       lookingForYear: params.year
     });
     
-    // Check how many match each filter
+    // Check how many match each filter (using flexible matching)
+    const normalizedMetricName = normalizeString(params.metric_name);
+    const normalizedCurrentCoachingPeriod = currentCoachingPeriod.map(normalizeMonth);
+    
     const clientMatches = allBehavioralCoaching.filter(r => params.clients.includes(r.client)).length;
-    const orgMatches = allBehavioralCoaching.filter(r => r.amplifai_org === params.organization).length;
-    // Check amplifai_metric exact match (standardized field)
-    const metricMatchesCount = allBehavioralCoaching.filter(r => 
-      r.amplifai_metric === params.metric_name
-    ).length;
-    const monthMatches = allBehavioralCoaching.filter(r => currentCoachingPeriod.includes(r.month)).length;
+    const orgMatches = allBehavioralCoaching.filter(r => normalizeString(r.amplifai_org) === normalizeString(params.organization)).length;
+    // Check both amplifai_metric and metric field with flexible matching
+    const metricMatchesCount = allBehavioralCoaching.filter(r => {
+      const amplifaiMatch = normalizeString(r.amplifai_metric) === normalizedMetricName;
+      const metricMatch = normalizeString(r.metric) === normalizedMetricName;
+      return amplifaiMatch || metricMatch;
+    }).length;
+    const monthMatches = allBehavioralCoaching.filter(r => {
+      const normalizedMonth = normalizeMonth(r.month);
+      return normalizedCurrentCoachingPeriod.includes(normalizedMonth);
+    }).length;
     
     logger.info('Filter match counts:', {
       clientMatches,
@@ -205,14 +240,51 @@ export async function processSnapshotData(params) {
   // Get unique programs
   const programsCount = new Set(currentMetrics.map(item => item.program)).size;
   
+  // Helper function for flexible matching
+  const normalizeString = (str) => {
+    if (!str) return '';
+    return String(str).trim().toUpperCase();
+  };
+  
+  // Normalize metric name for comparison (handle whitespace, case)
+  const normalizedMetricName = normalizeString(params.metric_name);
+  
+  // Normalize month names (handle "Jun" vs "June", etc.)
+  const normalizeMonth = (month) => {
+    if (!month) return '';
+    const m = String(month).trim();
+    const monthMap = {
+      'JAN': 'JAN', 'JANUARY': 'JAN',
+      'FEB': 'FEB', 'FEBRUARY': 'FEB',
+      'MAR': 'MAR', 'MARCH': 'MAR',
+      'APR': 'APR', 'APRIL': 'APR',
+      'MAY': 'MAY',
+      'JUN': 'JUN', 'JUNE': 'JUN',
+      'JUL': 'JUL', 'JULY': 'JUL',
+      'AUG': 'AUG', 'AUGUST': 'AUG',
+      'SEP': 'SEP', 'SEPTEMBER': 'SEP',
+      'OCT': 'OCT', 'OCTOBER': 'OCT',
+      'NOV': 'NOV', 'NOVEMBER': 'NOV',
+      'DEC': 'DEC', 'DECEMBER': 'DEC'
+    };
+    return monthMap[m.toUpperCase()] || m.toUpperCase();
+  };
+  
+  const normalizedCurrentCoachingPeriod = currentCoachingPeriod.map(normalizeMonth);
+  
   // Filter coaching for SHIFTED current period
-  // Match n8n exactly: uses exact match on amplifai_metric (no variation matching needed since it's standardized)
+  // Use flexible matching: case-insensitive, trimmed, with fallback to metric field
   const currentCoaching = (allBehavioralCoaching || []).filter(item => {
     const clientMatch = params.clients.includes(item.client);
-    const orgMatch = item.amplifai_org === params.organization;
-    // n8n uses exact match: row.amplifai_metric === params.metric_name
-    const metricMatch = item.amplifai_metric === params.metric_name;
-    const monthMatch = currentCoachingPeriod.includes(item.month);
+    const orgMatch = normalizeString(item.amplifai_org) === normalizeString(params.organization);
+    
+    // Try amplifai_metric first (standardized), then fallback to metric field
+    const amplifaiMetricMatch = normalizeString(item.amplifai_metric) === normalizedMetricName;
+    const metricFieldMatch = normalizeString(item.metric) === normalizedMetricName;
+    const metricMatch = amplifaiMetricMatch || metricFieldMatch;
+    
+    const normalizedItemMonth = normalizeMonth(item.month);
+    const monthMatch = normalizedCurrentCoachingPeriod.includes(normalizedItemMonth);
     const yearMatch = item.year === params.year;
     
     // Debug individual filter failures
@@ -226,7 +298,7 @@ export async function processSnapshotData(params) {
       logger.debug(`Coaching record filtered out: metric mismatch. Record amplifai_metric: "${item.amplifai_metric}", Record metric: "${item.metric}", Looking for: "${params.metric_name}"`);
     }
     if (!monthMatch && clientMatch && orgMatch && metricMatch && yearMatch) {
-      logger.debug(`Coaching record filtered out: month mismatch. Record month: "${item.month}", Looking for: ${currentCoachingPeriod.join(', ')}`);
+      logger.debug(`Coaching record filtered out: month mismatch. Record month: "${item.month}" (normalized: ${normalizedItemMonth}), Looking for: ${currentCoachingPeriod.join(', ')} (normalized: ${normalizedCurrentCoachingPeriod.join(', ')})`);
     }
     
     return clientMatch && orgMatch && metricMatch && monthMatch && yearMatch;
@@ -238,13 +310,23 @@ export async function processSnapshotData(params) {
   }
   
   // Filter coaching for SHIFTED previous period
-  // Match n8n exactly: uses exact match on amplifai_metric
+  // Use same flexible matching as current period
+  const normalizedPreviousCoachingPeriod = previousCoachingPeriod.map(normalizeMonth);
+  
   const previousCoaching = (allBehavioralCoaching || []).filter(item => {
-    return params.clients.includes(item.client) &&
-           item.amplifai_org === params.organization &&
-           item.amplifai_metric === params.metric_name &&
-           previousCoachingPeriod.includes(item.month) &&
-           item.year === params.year;
+    const clientMatch = params.clients.includes(item.client);
+    const orgMatch = normalizeString(item.amplifai_org) === normalizeString(params.organization);
+    
+    // Try amplifai_metric first (standardized), then fallback to metric field
+    const amplifaiMetricMatch = normalizeString(item.amplifai_metric) === normalizedMetricName;
+    const metricFieldMatch = normalizeString(item.metric) === normalizedMetricName;
+    const metricMatch = amplifaiMetricMatch || metricFieldMatch;
+    
+    const normalizedItemMonth = normalizeMonth(item.month);
+    const monthMatch = normalizedPreviousCoachingPeriod.includes(normalizedItemMonth);
+    const yearMatch = item.year === params.year;
+    
+    return clientMatch && orgMatch && metricMatch && monthMatch && yearMatch;
   });
   
   logger.info(`Previous coaching period: ${previousCoachingPeriod.join(', ')}, found ${previousCoaching.length} records`);
