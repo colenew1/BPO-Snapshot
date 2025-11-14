@@ -280,16 +280,32 @@ export async function processSnapshotData(params) {
   
   // Filter coaching for SHIFTED current period
   // Use flexible matching: case-insensitive, trimmed, with fallback to metric field
-  logger.info(`Filtering current coaching - Looking for: clients=${params.clients.join(',')}, org=${params.organization}, metric=${params.metric_name}, months=${currentCoachingPeriod.join(',')}, year=${params.year}`);
+  logger.info(`=== FILTERING CURRENT COACHING ===`);
+  logger.info(`Looking for: clients=${JSON.stringify(params.clients)}, org="${params.organization}", metric="${params.metric_name}", months=${JSON.stringify(currentCoachingPeriod)}, year=${params.year}`);
+  logger.info(`Total records in database: ${allBehavioralCoaching?.length || 0}`);
+  
+  // Quick check: how many match just org and year?
+  const orgYearMatches = (allBehavioralCoaching || []).filter(r => 
+    normalizeString(r.amplifai_org) === normalizeString(params.organization) && 
+    r.year === params.year
+  ).length;
+  logger.info(`Records matching org+year: ${orgYearMatches}`);
+  
+  // Count matches at each filter stage
+  let clientMatches = 0, orgMatches = 0, metricMatches = 0, monthMatches = 0, yearMatches = 0;
   
   const currentCoaching = (allBehavioralCoaching || []).filter(item => {
     const clientMatch = params.clients.includes(item.client);
+    if (clientMatch) clientMatches++;
+    
     const orgMatch = normalizeString(item.amplifai_org) === normalizeString(params.organization);
+    if (orgMatch) orgMatches++;
     
     // Try amplifai_metric first (standardized), then fallback to metric field
     const amplifaiMetricMatch = normalizeString(item.amplifai_metric) === normalizedMetricName;
     const metricFieldMatch = normalizeString(item.metric) === normalizedMetricName;
     const metricMatch = amplifaiMetricMatch || metricFieldMatch;
+    if (metricMatch) metricMatches++;
     
     // Month matching: Database uses exact format (Apr, May, Jun, etc.)
     // Try direct match first (most reliable), then normalized as fallback
@@ -300,20 +316,24 @@ export async function processSnapshotData(params) {
       const normalizedItemMonth = normalizeMonth(item.month);
       const normalizedMonthMatch = normalizedCurrentCoachingPeriod.includes(normalizedItemMonth);
       monthMatch = normalizedMonthMatch;
-      
-      // Log month matching details for debugging
-      if (clientMatch && orgMatch && metricMatch && yearMatch && !monthMatch) {
-        logger.debug(`Month mismatch - Record month: "${item.month}" (normalized: ${normalizedItemMonth}), Looking for: ${currentCoachingPeriod.join(', ')} (normalized: ${normalizedCurrentCoachingPeriod.join(', ')})`);
-      }
     } else {
       monthMatch = true;
     }
-    const yearMatch = item.year === params.year;
+    if (monthMatch) monthMatches++;
     
-    // Log why records are being filtered out
-    if (!monthMatch && clientMatch && orgMatch && metricMatch && yearMatch) {
-      logger.debug(`Record filtered out by month - Record: client=${item.client}, month=${item.month}, looking for months=${currentCoachingPeriod.join(',')}`);
+    const yearMatch = item.year === params.year;
+    if (yearMatch) yearMatches++;
+    
+    // Log first few records that match org/year but fail other filters
+    if (orgMatch && yearMatch && (!clientMatch || !metricMatch || !monthMatch) && clientMatches + orgMatches + metricMatches + monthMatches + yearMatches < 10) {
+      logger.info(`Record filtered: client=${item.client} (match:${clientMatch}), metric=${item.amplifai_metric || item.metric} (match:${metricMatch}), month=${item.month} (match:${monthMatch})`);
     }
+    
+    return clientMatch && orgMatch && metricMatch && monthMatch && yearMatch;
+  });
+  
+  logger.info(`Filter breakdown - Client: ${clientMatches}, Org: ${orgMatches}, Metric: ${metricMatches}, Month: ${monthMatches}, Year: ${yearMatches}`);
+  logger.info(`Final filtered count: ${currentCoaching.length}`);
     
     // Debug individual filter failures
     if (!clientMatch && orgMatch && metricMatch && monthMatch && yearMatch) {
