@@ -454,19 +454,44 @@ export async function processSnapshotData(params) {
   }
   
   // Calculate coaching summaries
+  logger.info(`Processing coaching data - Current: ${currentCoaching.length} records, Previous: ${previousCoaching.length} records`);
+  
   // Log sample records to verify coaching_count field
   if (currentCoaching.length > 0) {
-    logger.info('Sample current coaching records (first 3):', currentCoaching.slice(0, 3).map(item => ({
+    logger.info('Sample current coaching records (first 5):', currentCoaching.slice(0, 5).map(item => ({
       client: item.client,
+      month: item.month,
       behavior: item.behavior,
       coaching_count: item.coaching_count,
       coaching_count_type: typeof item.coaching_count,
-      has_coaching_count: item.coaching_count !== null && item.coaching_count !== undefined
+      amplifai_metric: item.amplifai_metric,
+      metric: item.metric
     })));
+    
+    // Check if coaching_count values are valid
+    const validCounts = currentCoaching.filter(item => item.coaching_count != null && item.coaching_count !== undefined && !isNaN(Number(item.coaching_count)));
+    const invalidCounts = currentCoaching.length - validCounts.length;
+    logger.info(`Coaching count validation - Valid: ${validCounts.length}, Invalid/null: ${invalidCounts}`);
+  } else {
+    logger.warn('NO CURRENT COACHING RECORDS TO PROCESS!');
+  }
+  
+  if (previousCoaching.length > 0) {
+    logger.info('Sample previous coaching records (first 3):', previousCoaching.slice(0, 3).map(item => ({
+      client: item.client,
+      month: item.month,
+      behavior: item.behavior,
+      coaching_count: item.coaching_count
+    })));
+  } else {
+    logger.warn('NO PREVIOUS COACHING RECORDS TO PROCESS!');
   }
   
   const currentSessions = currentCoaching.reduce((sum, item) => {
     const count = Number(item.coaching_count) || 0;
+    if (count > 0) {
+      logger.debug(`Adding to current sessions: ${count} from ${item.behavior} (month: ${item.month})`);
+    }
     return sum + count;
   }, 0);
   const previousSessions = previousCoaching.reduce((sum, item) => {
@@ -474,7 +499,13 @@ export async function processSnapshotData(params) {
     return sum + count;
   }, 0);
   
-  logger.info(`Coaching session totals - Current: ${currentSessions}, Previous: ${previousSessions}`);
+  logger.info(`Coaching session totals - Current: ${currentSessions} (from ${currentCoaching.length} records), Previous: ${previousSessions} (from ${previousCoaching.length} records)`);
+  
+  if (currentSessions === 0 && currentCoaching.length > 0) {
+    logger.error('WARNING: Current coaching has records but sessions = 0! All coaching_count values might be null/0');
+    const counts = currentCoaching.map(r => r.coaching_count);
+    logger.error(`Coaching count values: ${JSON.stringify(counts.slice(0, 10))}`);
+  }
   
   // Only average rows with non-NULL effectiveness
   const currentCoachingWithEffectiveness = currentCoaching.filter(item => 
@@ -529,27 +560,40 @@ export async function processSnapshotData(params) {
   };
   
   // Top behaviors for current period WITH SUB-BEHAVIORS
+  logger.info('Starting behavior aggregation for current period...');
   const behaviorCounts = {};
   currentCoaching.forEach(item => {
     const behavior = item.behavior;
     if (behavior) {
-      behaviorCounts[behavior] = (behaviorCounts[behavior] || 0) + (item.coaching_count || 0);
+      const count = Number(item.coaching_count) || 0;
+      behaviorCounts[behavior] = (behaviorCounts[behavior] || 0) + count;
+      logger.debug(`Behavior "${behavior}": adding ${count}, total now: ${behaviorCounts[behavior]}`);
+    } else {
+      logger.warn(`Record with no behavior: ${JSON.stringify(item)}`);
     }
   });
   
   logger.info(`Found ${Object.keys(behaviorCounts).length} unique behaviors in current period`);
+  logger.info(`Behavior counts: ${JSON.stringify(Object.entries(behaviorCounts).sort((a, b) => b[1] - a[1]).slice(0, 5))}`);
   
   const topBehaviors = Object.entries(behaviorCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-    .map(([behavior, count]) => ({
-      behavior,
-      sessions: count,
-      percent_of_total: currentSessions > 0 ? ((count / currentSessions) * 100).toFixed(1) + '%' : '0%',
-      sub_behaviors: getSubBehaviors(currentCoaching, behavior)
-    }));
+    .map(([behavior, count]) => {
+      const subBehaviors = getSubBehaviors(currentCoaching, behavior);
+      logger.debug(`Processing behavior "${behavior}": ${count} sessions, ${subBehaviors.length} sub-behaviors`);
+      return {
+        behavior,
+        sessions: count,
+        percent_of_total: currentSessions > 0 ? ((count / currentSessions) * 100).toFixed(1) + '%' : '0%',
+        sub_behaviors: subBehaviors
+      };
+    });
   
-  logger.info(`Top behaviors: ${topBehaviors.length} behaviors with ${currentSessions} total sessions`);
+  logger.info(`Top behaviors created: ${topBehaviors.length} behaviors with ${currentSessions} total sessions`);
+  if (topBehaviors.length === 0) {
+    logger.error('NO TOP BEHAVIORS CREATED! This means behaviorCounts is empty or all counts are 0');
+  }
   
   // Log the structure being created
   if (topBehaviors.length > 0) {
