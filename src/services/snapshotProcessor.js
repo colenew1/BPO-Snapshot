@@ -291,8 +291,12 @@ export async function processSnapshotData(params) {
   ).length;
   logger.info(`Records matching org+year: ${orgYearMatches}`);
   
-  // Count matches at each filter stage
-  let clientMatches = 0, orgMatches = 0, metricMatches = 0, monthMatches = 0, yearMatches = 0;
+  // Count matches at each filter stage (initialize outside filter)
+  let clientMatches = 0;
+  let orgMatches = 0;
+  let metricMatches = 0;
+  let monthMatches = 0;
+  let yearMatches = 0;
   
   const currentCoaching = (allBehavioralCoaching || []).filter(item => {
     const clientMatch = params.clients.includes(item.client);
@@ -700,15 +704,16 @@ export async function processSnapshotData(params) {
   });
   
   // Add debug info to response (always show for debugging)
-  result.debug_info = {
+  // Make sure variables are in scope
+  const debugInfo = {
     total_records_in_db: allBehavioralCoaching?.length || 0,
     records_matching_org_year: orgYearMatches || 0,
     filter_breakdown: {
-      client_matches: clientMatches || 0,
-      org_matches: orgMatches || 0,
-      metric_matches: metricMatches || 0,
-      month_matches: monthMatches || 0,
-      year_matches: yearMatches || 0
+      client_matches: clientMatches,
+      org_matches: orgMatches,
+      metric_matches: metricMatches,
+      month_matches: monthMatches,
+      year_matches: yearMatches
     },
     search_criteria: {
       clients: params.clients,
@@ -728,8 +733,15 @@ export async function processSnapshotData(params) {
       metric: allBehavioralCoaching[0].metric,
       month: allBehavioralCoaching[0].month,
       year: allBehavioralCoaching[0].year
-    } : null
+    } : null,
+    // Add more diagnostic info
+    db_query_success: !coachingError,
+    db_error: coachingError ? coachingError.message : null,
+    all_behavioral_coaching_length: allBehavioralCoaching?.length || 0
   };
+  
+  result.debug_info = debugInfo;
+  logger.info('Debug info being added to response:', JSON.stringify(debugInfo, null, 2));
   
   return result;
 }
