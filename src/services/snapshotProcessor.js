@@ -79,13 +79,16 @@ export async function processSnapshotData(params) {
     // Get unique values to see what's available
     const sampleRecord = allBehavioralCoaching[0];
     const uniqueClients = [...new Set(allBehavioralCoaching.map(r => r.client))];
-    const uniqueMetrics = [...new Set(allBehavioralCoaching.map(r => r.amplifai_metric))];
+    // Check both amplifai_metric and metric fields
+    const uniqueAmplifaiMetrics = [...new Set(allBehavioralCoaching.map(r => r.amplifai_metric).filter(Boolean))];
+    const uniqueMetrics = [...new Set(allBehavioralCoaching.map(r => r.metric).filter(Boolean))];
     const uniqueMonths = [...new Set(allBehavioralCoaching.map(r => r.month))];
     
     logger.info('Sample record from DB:', {
       client: sampleRecord.client,
       amplifai_org: sampleRecord.amplifai_org,
       amplifai_metric: sampleRecord.amplifai_metric,
+      metric: sampleRecord.metric, // Also check this field
       month: sampleRecord.month,
       year: sampleRecord.year,
       behavior: sampleRecord.behavior
@@ -93,7 +96,8 @@ export async function processSnapshotData(params) {
     
     logger.info('Available values in DB:', {
       clients: uniqueClients,
-      metrics: uniqueMetrics,
+      amplifai_metrics: uniqueAmplifaiMetrics,
+      metrics: uniqueMetrics, // Original metric field
       months: uniqueMonths.sort()
     });
     
@@ -108,7 +112,10 @@ export async function processSnapshotData(params) {
     // Check how many match each filter
     const clientMatches = allBehavioralCoaching.filter(r => params.clients.includes(r.client)).length;
     const orgMatches = allBehavioralCoaching.filter(r => r.amplifai_org === params.organization).length;
-    const metricMatches = allBehavioralCoaching.filter(r => r.amplifai_metric === params.metric_name).length;
+    // Check both amplifai_metric and metric fields for matching
+    const metricMatches = allBehavioralCoaching.filter(r => 
+      r.amplifai_metric === params.metric_name || r.metric === params.metric_name
+    ).length;
     const monthMatches = allBehavioralCoaching.filter(r => currentCoachingPeriod.includes(r.month)).length;
     
     logger.info('Filter match counts:', {
@@ -154,11 +161,12 @@ export async function processSnapshotData(params) {
   const programsCount = new Set(currentMetrics.map(item => item.program)).size;
   
   // Filter coaching for SHIFTED current period
-  // Note: This matches the n8n workflow logic exactly
+  // Note: Check both amplifai_metric and metric fields (some records may use metric instead)
   const currentCoaching = (allBehavioralCoaching || []).filter(item => {
     const clientMatch = params.clients.includes(item.client);
     const orgMatch = item.amplifai_org === params.organization;
-    const metricMatch = item.amplifai_metric === params.metric_name;
+    // Check both amplifai_metric and metric fields
+    const metricMatch = item.amplifai_metric === params.metric_name || item.metric === params.metric_name;
     const monthMatch = currentCoachingPeriod.includes(item.month);
     const yearMatch = item.year === params.year;
     
@@ -170,7 +178,7 @@ export async function processSnapshotData(params) {
       logger.debug(`Coaching record filtered out: org mismatch. Record org: "${item.amplifai_org}", Looking for: "${params.organization}"`);
     }
     if (!metricMatch && clientMatch && orgMatch && monthMatch && yearMatch) {
-      logger.debug(`Coaching record filtered out: metric mismatch. Record metric: "${item.amplifai_metric}", Looking for: "${params.metric_name}"`);
+      logger.debug(`Coaching record filtered out: metric mismatch. Record amplifai_metric: "${item.amplifai_metric}", Record metric: "${item.metric}", Looking for: "${params.metric_name}"`);
     }
     if (!monthMatch && clientMatch && orgMatch && metricMatch && yearMatch) {
       logger.debug(`Coaching record filtered out: month mismatch. Record month: "${item.month}", Looking for: ${currentCoachingPeriod.join(', ')}`);
@@ -185,10 +193,11 @@ export async function processSnapshotData(params) {
   }
   
   // Filter coaching for SHIFTED previous period
+  // Check both amplifai_metric and metric fields
   const previousCoaching = (allBehavioralCoaching || []).filter(item => {
     return params.clients.includes(item.client) &&
            item.amplifai_org === params.organization &&
-           item.amplifai_metric === params.metric_name &&
+           (item.amplifai_metric === params.metric_name || item.metric === params.metric_name) &&
            previousCoachingPeriod.includes(item.month) &&
            item.year === params.year;
   });
