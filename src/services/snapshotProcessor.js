@@ -334,9 +334,6 @@ export async function processSnapshotData(params) {
   
   logger.info(`Filter breakdown - Client: ${clientMatches}, Org: ${orgMatches}, Metric: ${metricMatches}, Month: ${monthMatches}, Year: ${yearMatches}`);
   logger.info(`Final filtered count: ${currentCoaching.length}`);
-    
-    return clientMatch && orgMatch && metricMatch && monthMatch && yearMatch;
-  });
   
   logger.info(`Current coaching period: ${currentCoachingPeriod.join(', ')}, found ${currentCoaching.length} records`);
   logger.info(`Normalized current coaching period: ${normalizedCurrentCoachingPeriod.join(', ')}`);
