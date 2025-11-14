@@ -237,8 +237,12 @@ export async function processSnapshotData(params) {
   const change = (currentAvg !== null && previousAvg !== null) ? currentAvg - previousAvg : null;
   const percentChange = (change !== null && previousAvg !== 0) ? ((change / previousAvg) * 100).toFixed(2) : null;
   
-  // Get unique programs
-  const programsCount = new Set(currentMetrics.map(item => item.program)).size;
+  // Get unique programs from both current and previous periods
+  const allPrograms = new Set([
+    ...currentMetrics.map(item => item.program),
+    ...previousMetrics.map(item => item.program)
+  ].filter(Boolean)); // Filter out null/undefined
+  const programsCount = allPrograms.size;
   
   // Helper function for flexible matching
   const normalizeString = (str) => {
@@ -332,6 +336,28 @@ export async function processSnapshotData(params) {
   logger.info(`Previous coaching period: ${previousCoachingPeriod.join(', ')}, found ${previousCoaching.length} records`);
   if (previousCoaching.length === 0 && allBehavioralCoaching && allBehavioralCoaching.length > 0) {
     logger.warn('No previous period coaching records matched filters!');
+    logger.warn(`Looking for months: ${previousCoachingPeriod.join(', ')}, Year: ${params.year}`);
+    // Check if those months exist at all
+    const availableMonths = [...new Set(allBehavioralCoaching
+      .filter(r => {
+        const orgMatch = normalizeString(r.amplifai_org) === normalizeString(params.organization);
+        const yearMatch = r.year === params.year;
+        return orgMatch && yearMatch;
+      })
+      .map(r => r.month))];
+    logger.warn(`Available months in DB for ${params.organization} ${params.year}: ${availableMonths.sort().join(', ')}`);
+    
+    // Also check what metrics are available for those months
+    const availableMetrics = [...new Set(allBehavioralCoaching
+      .filter(r => {
+        const orgMatch = normalizeString(r.amplifai_org) === normalizeString(params.organization);
+        const yearMatch = r.year === params.year;
+        const monthMatch = previousCoachingPeriod.map(normalizeMonth).includes(normalizeMonth(r.month));
+        return orgMatch && yearMatch && monthMatch;
+      })
+      .map(r => r.amplifai_metric || r.metric)
+      .filter(Boolean))];
+    logger.warn(`Available metrics for previous period months: ${availableMetrics.join(', ')}`);
   }
   
   // Calculate coaching summaries
