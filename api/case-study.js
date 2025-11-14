@@ -142,14 +142,14 @@ Output ONLY the case study text. No JSON, no markdown formatting, no headers, ju
       messages: [
         {
           role: 'system',
-          content: 'You are a professional content writer specializing in creating compelling client-facing case studies and blog posts for performance improvement stories.'
+          content: 'You are a data-driven analyst writing customer success case studies for contact center performance improvements. You write direct, analytical content that connects specific coaching behaviors to measurable customer experience outcomes. You avoid marketing fluff and focus on clear problem-solution-results narratives grounded in data.'
         },
         {
           role: 'user',
           content: prompt
         }
       ],
-      temperature: 0.8, // Slightly higher for more creative/engaging writing
+      temperature: 0.5, // Lower temperature for more analytical, direct writing
       max_tokens: 1000, // Increased token limit for longer case study
     });
     
