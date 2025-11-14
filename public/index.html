@@ -930,6 +930,22 @@
             console.log('Top Behaviors Current:', data.coaching_activity?.current?.top_behaviors);
             console.log('Top Behaviors Previous:', data.coaching_activity?.previous?.top_behaviors);
             
+            // Log debug_info prominently
+            if (data.debug_info) {
+                console.log('=== DEBUG INFO ===');
+                console.log('Total records in DB:', data.debug_info.total_records_in_db);
+                console.log('Records matching org+year:', data.debug_info.records_matching_org_year);
+                console.log('Filter breakdown:', data.debug_info.filter_breakdown);
+                console.log('Search criteria:', data.debug_info.search_criteria);
+                console.log('Current coaching records found:', data.debug_info.current_coaching_records);
+                console.log('Previous coaching records found:', data.debug_info.previous_coaching_records);
+                console.log('Sample DB record:', data.debug_info.sample_db_record);
+                console.log('Full debug_info:', JSON.stringify(data.debug_info, null, 2));
+                console.log('=== END DEBUG INFO ===');
+            } else {
+                console.warn('⚠️ debug_info is missing from response!');
+            }
+            
             // Handle array response (from n8n webhook)
             if (Array.isArray(data) && data.length > 0) {
                 data = data[0];
