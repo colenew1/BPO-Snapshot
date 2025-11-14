@@ -253,8 +253,27 @@ export async function processSnapshotData(params) {
   }
   
   // Calculate coaching summaries
-  const currentSessions = currentCoaching.reduce((sum, item) => sum + (item.coaching_count || 0), 0);
-  const previousSessions = previousCoaching.reduce((sum, item) => sum + (item.coaching_count || 0), 0);
+  // Log sample records to verify coaching_count field
+  if (currentCoaching.length > 0) {
+    logger.info('Sample current coaching records (first 3):', currentCoaching.slice(0, 3).map(item => ({
+      client: item.client,
+      behavior: item.behavior,
+      coaching_count: item.coaching_count,
+      coaching_count_type: typeof item.coaching_count,
+      has_coaching_count: item.coaching_count !== null && item.coaching_count !== undefined
+    })));
+  }
+  
+  const currentSessions = currentCoaching.reduce((sum, item) => {
+    const count = Number(item.coaching_count) || 0;
+    return sum + count;
+  }, 0);
+  const previousSessions = previousCoaching.reduce((sum, item) => {
+    const count = Number(item.coaching_count) || 0;
+    return sum + count;
+  }, 0);
+  
+  logger.info(`Coaching session totals - Current: ${currentSessions}, Previous: ${previousSessions}`);
   
   // Only average rows with non-NULL effectiveness
   const currentCoachingWithEffectiveness = currentCoaching.filter(item => 
