@@ -335,17 +335,6 @@ export async function processSnapshotData(params) {
   logger.info(`Filter breakdown - Client: ${clientMatches}, Org: ${orgMatches}, Metric: ${metricMatches}, Month: ${monthMatches}, Year: ${yearMatches}`);
   logger.info(`Final filtered count: ${currentCoaching.length}`);
     
-    // Debug individual filter failures
-    if (!clientMatch && orgMatch && metricMatch && monthMatch && yearMatch) {
-      logger.debug(`Coaching record filtered out: client mismatch. Record client: "${item.client}", Looking for: ${JSON.stringify(params.clients)}`);
-    }
-    if (!orgMatch && clientMatch && metricMatch && monthMatch && yearMatch) {
-      logger.debug(`Coaching record filtered out: org mismatch. Record org: "${item.amplifai_org}", Looking for: "${params.organization}"`);
-    }
-    if (!metricMatch && clientMatch && orgMatch && monthMatch && yearMatch) {
-      logger.debug(`Coaching record filtered out: metric mismatch. Record amplifai_metric: "${item.amplifai_metric}", Record metric: "${item.metric}", Looking for: "${params.metric_name}"`);
-    }
-    
     return clientMatch && orgMatch && metricMatch && monthMatch && yearMatch;
   });
   
