@@ -289,12 +289,17 @@ export async function processSnapshotData(params) {
     const metricFieldMatch = normalizeString(item.metric) === normalizedMetricName;
     const metricMatch = amplifaiMetricMatch || metricFieldMatch;
     
-    // Normalize both the item month and the search months for comparison
-    const normalizedItemMonth = normalizeMonth(item.month);
-    // Also try direct match in case normalization isn't needed
+    // Month matching: Database uses exact format (Apr, May, Jun, etc.)
+    // Try direct match first (most reliable), then normalized as fallback
     const directMonthMatch = currentCoachingPeriod.includes(item.month);
-    const normalizedMonthMatch = normalizedCurrentCoachingPeriod.includes(normalizedItemMonth);
-    const monthMatch = directMonthMatch || normalizedMonthMatch;
+    if (!directMonthMatch) {
+      // Fallback to normalized match for variations (Sep vs September, etc.)
+      const normalizedItemMonth = normalizeMonth(item.month);
+      const normalizedMonthMatch = normalizedCurrentCoachingPeriod.includes(normalizedItemMonth);
+      var monthMatch = normalizedMonthMatch;
+    } else {
+      var monthMatch = true;
+    }
     const yearMatch = item.year === params.year;
     
     // Log month matching details for debugging
@@ -322,8 +327,18 @@ export async function processSnapshotData(params) {
   // Log what months are actually in the filtered coaching data
   if (currentCoaching.length > 0) {
     const monthsInResults = [...new Set(currentCoaching.map(r => r.month))];
-    const normalizedMonthsInResults = [...new Set(currentCoaching.map(r => normalizeMonth(r.month)))];
-    logger.info(`Months found in current coaching results: ${monthsInResults.join(', ')} (normalized: ${normalizedMonthsInResults.join(', ')})`);
+    const monthCounts = {};
+    currentCoaching.forEach(r => {
+      monthCounts[r.month] = (monthCounts[r.month] || 0) + 1;
+    });
+    logger.info(`Months found in current coaching results: ${monthsInResults.join(', ')}`);
+    logger.info(`Month distribution: ${Object.entries(monthCounts).map(([m, c]) => `${m}:${c}`).join(', ')}`);
+    
+    // Warn if we're getting months we didn't expect
+    const unexpectedMonths = monthsInResults.filter(m => !currentCoachingPeriod.includes(m));
+    if (unexpectedMonths.length > 0) {
+      logger.warn(`Unexpected months in results: ${unexpectedMonths.join(', ')}. Expected: ${currentCoachingPeriod.join(', ')}`);
+    }
   }
   
   if (currentCoaching.length === 0 && allBehavioralCoaching && allBehavioralCoaching.length > 0) {
@@ -355,12 +370,17 @@ export async function processSnapshotData(params) {
     const metricFieldMatch = normalizeString(item.metric) === normalizedMetricName;
     const metricMatch = amplifaiMetricMatch || metricFieldMatch;
     
-    // Normalize both the item month and the search months for comparison
-    const normalizedItemMonth = normalizeMonth(item.month);
-    // Also try direct match in case normalization isn't needed
+    // Month matching: Database uses exact format (Apr, May, Jun, etc.)
+    // Try direct match first (most reliable), then normalized as fallback
     const directMonthMatch = previousCoachingPeriod.includes(item.month);
-    const normalizedMonthMatch = normalizedPreviousCoachingPeriod.includes(normalizedItemMonth);
-    const monthMatch = directMonthMatch || normalizedMonthMatch;
+    if (!directMonthMatch) {
+      // Fallback to normalized match for variations (Sep vs September, etc.)
+      const normalizedItemMonth = normalizeMonth(item.month);
+      const normalizedMonthMatch = normalizedPreviousCoachingPeriod.includes(normalizedItemMonth);
+      var monthMatch = normalizedMonthMatch;
+    } else {
+      var monthMatch = true;
+    }
     const yearMatch = item.year === params.year;
     
     // Log month matching details for debugging
