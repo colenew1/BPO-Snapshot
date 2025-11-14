@@ -1041,11 +1041,27 @@
             const currentEffectiveness = parseEffectiveness(data.coaching_activity?.current?.coaching_effectiveness, dataQuality);
             const previousEffectiveness = parseEffectiveness(data.coaching_activity?.previous?.coaching_effectiveness, dataQuality);
             
+            // Check if no coaching data was found and show helpful message
+            const hasNoCoachingData = (data.coaching_activity?.current?.total_coaching_sessions || 0) === 0 && 
+                                      (data.coaching_activity?.previous?.total_coaching_sessions || 0) === 0;
+            const availableMonths = data.debug_info?.available_months_in_db || [];
+            const searchingForMonths = data.debug_info?.search_criteria?.current_coaching_months || [];
+            
             html += `
                 <div class="card">
                     <div class="card-header">
                         <h3 class="card-title">Coaching Activity Overview</h3>
                     </div>
+                    ${hasNoCoachingData && availableMonths.length > 0 ? `
+                    <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                        <div style="font-weight: bold; color: #856404; margin-bottom: 8px;">⚠️ No coaching data found for selected months</div>
+                        <div style="color: #856404; font-size: 0.9rem;">
+                            <div style="margin-bottom: 4px;">Searching for: <strong>${searchingForMonths.join(', ')}</strong></div>
+                            <div>Available months in database: <strong>${availableMonths.join(', ')}</strong></div>
+                            <div style="margin-top: 8px; font-size: 0.85rem;">💡 Tip: Select months that include ${availableMonths[0]} or later to see coaching data.</div>
+                        </div>
+                    </div>
+                    ` : ''}
                     <div class="coaching-comparison">
                         <div class="coaching-period">
                             <div class="coaching-sessions">${data.coaching_activity?.current?.total_coaching_sessions || 0}</div>
