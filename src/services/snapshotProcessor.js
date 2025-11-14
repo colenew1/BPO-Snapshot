@@ -292,20 +292,21 @@ export async function processSnapshotData(params) {
     // Month matching: Database uses exact format (Apr, May, Jun, etc.)
     // Try direct match first (most reliable), then normalized as fallback
     const directMonthMatch = currentCoachingPeriod.includes(item.month);
+    let monthMatch;
     if (!directMonthMatch) {
       // Fallback to normalized match for variations (Sep vs September, etc.)
       const normalizedItemMonth = normalizeMonth(item.month);
       const normalizedMonthMatch = normalizedCurrentCoachingPeriod.includes(normalizedItemMonth);
-      var monthMatch = normalizedMonthMatch;
+      monthMatch = normalizedMonthMatch;
+      
+      // Log month matching details for debugging
+      if (clientMatch && orgMatch && metricMatch && yearMatch && !monthMatch) {
+        logger.debug(`Month mismatch - Record month: "${item.month}" (normalized: ${normalizedItemMonth}), Looking for: ${currentCoachingPeriod.join(', ')} (normalized: ${normalizedCurrentCoachingPeriod.join(', ')})`);
+      }
     } else {
-      var monthMatch = true;
+      monthMatch = true;
     }
     const yearMatch = item.year === params.year;
-    
-    // Log month matching details for debugging
-    if (clientMatch && orgMatch && metricMatch && yearMatch && !monthMatch) {
-      logger.debug(`Month mismatch - Record month: "${item.month}" (normalized: ${normalizedItemMonth}), Looking for: ${currentCoachingPeriod.join(', ')} (normalized: ${normalizedCurrentCoachingPeriod.join(', ')})`);
-    }
     
     // Debug individual filter failures
     if (!clientMatch && orgMatch && metricMatch && monthMatch && yearMatch) {
@@ -373,20 +374,21 @@ export async function processSnapshotData(params) {
     // Month matching: Database uses exact format (Apr, May, Jun, etc.)
     // Try direct match first (most reliable), then normalized as fallback
     const directMonthMatch = previousCoachingPeriod.includes(item.month);
+    let monthMatch;
     if (!directMonthMatch) {
       // Fallback to normalized match for variations (Sep vs September, etc.)
       const normalizedItemMonth = normalizeMonth(item.month);
       const normalizedMonthMatch = normalizedPreviousCoachingPeriod.includes(normalizedItemMonth);
-      var monthMatch = normalizedMonthMatch;
+      monthMatch = normalizedMonthMatch;
+      
+      // Log month matching details for debugging
+      if (clientMatch && orgMatch && metricMatch && yearMatch && !monthMatch) {
+        logger.debug(`Previous period month mismatch - Record month: "${item.month}" (normalized: ${normalizedItemMonth}), Looking for: ${previousCoachingPeriod.join(', ')} (normalized: ${normalizedPreviousCoachingPeriod.join(', ')})`);
+      }
     } else {
-      var monthMatch = true;
+      monthMatch = true;
     }
     const yearMatch = item.year === params.year;
-    
-    // Log month matching details for debugging
-    if (clientMatch && orgMatch && metricMatch && yearMatch && !monthMatch) {
-      logger.debug(`Previous period month mismatch - Record month: "${item.month}" (normalized: ${normalizedItemMonth}), Looking for: ${previousCoachingPeriod.join(', ')} (normalized: ${normalizedPreviousCoachingPeriod.join(', ')})`);
-    }
     
     return clientMatch && orgMatch && metricMatch && monthMatch && yearMatch;
   });
