@@ -84,58 +84,68 @@ export default async function handler(req, res) {
     
     logger.info('Processing snapshot request', params);
     
-    // Process data (replicates "Parse Data" node)
-    const snapshotData = await processSnapshotData(params);
+    let snapshotData;
+    try {
+      // Process data (replicates "Parse Data" node)
+      logger.info('Calling processSnapshotData...');
+      snapshotData = await processSnapshotData(params);
+      logger.info('processSnapshotData completed successfully');
+    } catch (processError) {
+      logger.error('Error in processSnapshotData:', processError);
+      throw processError;
+    }
     
     // Log what we're about to send to frontend
     logger.info('Snapshot data prepared for response:', {
       has_coaching_activity: !!snapshotData.coaching_activity,
       has_debug_info: !!snapshotData.debug_info,
       current_sessions: snapshotData.coaching_activity?.current?.total_coaching_sessions || 0,
-      current_behaviors: snapshotData.coaching_activity?.current?.top_behaviors?.length || 0,
-      previous_sessions: snapshotData.coaching_activity?.previous?.total_coaching_sessions || 0,
-      previous_behaviors: snapshotData.coaching_activity?.previous?.top_behaviors?.length || 0,
-      current_behaviors_sample: snapshotData.coaching_activity?.current?.top_behaviors?.[0]?.behavior || 'none',
-      debug_info_keys: snapshotData.debug_info ? Object.keys(snapshotData.debug_info) : 'none'
+      current_behaviors: snapshotData.coaching_activity?.current?.top_behaviors?.length || 0
     });
     
-    // Generate AI summary (replicates "AI Summary" node)
-    const aiSummary = await generateAISummary(snapshotData);
-    snapshotData.ai_summary = aiSummary;
-    
-    // Save to database (replicates "Snapshot" node)
-    await saveSnapshot(snapshotData, params);
-    
-    // Add debug_info at the VERY END so nothing can remove it
-    // Create a safe copy of existing debug_info to avoid circular reference issues
     try {
-      let existingDebugInfo = {};
-      if (snapshotData.debug_info) {
-        try {
-          // Safely copy only serializable properties
-          existingDebugInfo = JSON.parse(JSON.stringify(snapshotData.debug_info));
-        } catch (e) {
-          // If it can't be serialized, just use empty object
-          logger.warn('Could not serialize existing debug_info, using empty object');
-        }
-      }
-      
+      // Generate AI summary (replicates "AI Summary" node)
+      logger.info('Generating AI summary...');
+      const aiSummary = await generateAISummary(snapshotData);
+      snapshotData.ai_summary = aiSummary;
+      logger.info('AI summary generated');
+    } catch (aiError) {
+      logger.error('Error generating AI summary:', aiError);
+      snapshotData.ai_summary = 'AI summary generation failed';
+    }
+    
+    try {
+      // Save to database (replicates "Snapshot" node)
+      logger.info('Saving snapshot to database...');
+      await saveSnapshot(snapshotData, params);
+      logger.info('Snapshot saved');
+    } catch (saveError) {
+      logger.error('Error saving snapshot:', saveError);
+      // Don't fail the request if save fails
+    }
+    
+    // Add debug_info at the VERY END - simple version to avoid any serialization issues
+    try {
       snapshotData.debug_info = {
-        ...existingDebugInfo,
-        added_at_end: true,
         test_message: 'DEBUG_INFO_FORCE_ADDED_AT_END',
+        added_at_end: true,
         coaching_records_current: snapshotData.snapshot_metadata?.data_quality?.coaching_records_current || 0,
         coaching_records_previous: snapshotData.snapshot_metadata?.data_quality?.coaching_records_previous || 0,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        // Try to preserve existing debug_info if it exists and is simple
+        ...(snapshotData.debug_info && typeof snapshotData.debug_info === 'object' ? {
+          total_records_in_db: snapshotData.debug_info.total_records_in_db,
+          records_matching_org_year: snapshotData.debug_info.records_matching_org_year,
+          filter_breakdown: snapshotData.debug_info.filter_breakdown,
+          search_criteria: snapshotData.debug_info.search_criteria,
+          sample_db_record: snapshotData.debug_info.sample_db_record
+        } : {})
       };
-      
-      logger.info('Final response - has_debug_info:', !!snapshotData.debug_info);
     } catch (debugError) {
       logger.error('Error adding debug_info:', debugError);
-      // Don't fail the request if debug_info fails
       snapshotData.debug_info = {
         error: 'Failed to create debug_info',
-        message: debugError.message
+        message: String(debugError.message || debugError)
       };
     }
     
