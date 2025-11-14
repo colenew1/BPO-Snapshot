@@ -51,6 +51,7 @@ export async function processSnapshotData(params) {
   const isValid = (v) => v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
   
   // Fetch monthly metrics
+  logger.info(`Fetching monthly_metrics for org: ${params.organization}, year: ${params.year}`);
   const { data: allMonthlyMetrics, error: metricsError } = await supabase
     .from('monthly_metrics')
     .select('*')
@@ -58,10 +59,14 @@ export async function processSnapshotData(params) {
     .eq('year', params.year);
   
   if (metricsError) {
-    throw new Error(`Failed to fetch monthly metrics: ${metricsError.message}`);
+    logger.error('Monthly metrics query error:', metricsError);
+    throw new Error(`Failed to fetch monthly metrics: ${metricsError.message} (code: ${metricsError.code})`);
   }
   
+  logger.info(`Fetched ${allMonthlyMetrics?.length || 0} monthly metrics records`);
+  
   // Fetch behavioral coaching
+  logger.info(`Fetching behavioral_coaching for org: ${params.organization}, year: ${params.year}`);
   const { data: allBehavioralCoaching, error: coachingError } = await supabase
     .from('behavioral_coaching')
     .select('*')
@@ -69,10 +74,19 @@ export async function processSnapshotData(params) {
     .eq('year', params.year);
   
   if (coachingError) {
-    throw new Error(`Failed to fetch coaching data: ${coachingError.message}`);
+    logger.error('Behavioral coaching query error:', coachingError);
+    throw new Error(`Failed to fetch coaching data: ${coachingError.message} (code: ${coachingError.code})`);
   }
   
   logger.info(`Fetched ${allBehavioralCoaching?.length || 0} total coaching records for ${params.organization} in ${params.year}`);
+  
+  // If no data returned, check if it's an RLS/permissions issue
+  if ((!allMonthlyMetrics || allMonthlyMetrics.length === 0) && (!allBehavioralCoaching || allBehavioralCoaching.length === 0)) {
+    logger.warn('No data returned from either table. This might indicate:');
+    logger.warn('1. RLS (Row Level Security) policies blocking access');
+    logger.warn('2. Need service role key instead of anon key');
+    logger.warn('3. No data exists for this org/year combination');
+  }
   
   // DEBUG: See what we actually got from database
   if (allBehavioralCoaching && allBehavioralCoaching.length > 0) {
@@ -84,20 +98,21 @@ export async function processSnapshotData(params) {
     const uniqueMetrics = [...new Set(allBehavioralCoaching.map(r => r.metric).filter(Boolean))];
     const uniqueMonths = [...new Set(allBehavioralCoaching.map(r => r.month))];
     
-    logger.info('Sample record from DB:', {
+    logger.info('Sample record from DB:', JSON.stringify({
       client: sampleRecord.client,
       amplifai_org: sampleRecord.amplifai_org,
       amplifai_metric: sampleRecord.amplifai_metric,
-      metric: sampleRecord.metric, // Also check this field
+      metric: sampleRecord.metric,
       month: sampleRecord.month,
       year: sampleRecord.year,
-      behavior: sampleRecord.behavior
-    });
+      behavior: sampleRecord.behavior,
+      coaching_count: sampleRecord.coaching_count
+    }, null, 2));
     
     logger.info('Available values in DB:', {
       clients: uniqueClients,
       amplifai_metrics: uniqueAmplifaiMetrics,
-      metrics: uniqueMetrics, // Original metric field
+      metrics: uniqueMetrics,
       months: uniqueMonths.sort()
     });
     
@@ -125,8 +140,23 @@ export async function processSnapshotData(params) {
       monthMatches,
       totalRecords: allBehavioralCoaching.length
     });
+    
+    // Show first few records that match org but not other filters
+    if (metricMatchesCount === 0 && orgMatches > 0) {
+      const orgMatched = allBehavioralCoaching.filter(r => r.amplifai_org === params.organization).slice(0, 3);
+      logger.warn('Sample records that match org but not metric:', orgMatched.map(r => ({
+        client: r.client,
+        amplifai_metric: r.amplifai_metric,
+        metric: r.metric,
+        month: r.month
+      })));
+    }
   } else {
     logger.warn('No coaching records found in database at all!');
+    logger.warn('This could mean:');
+    logger.warn('1. RLS policies are blocking access (try SUPABASE_SERVICE_ROLE_KEY)');
+    logger.warn('2. No data exists for this org/year');
+    logger.warn('3. Database connection issue');
   }
   
   // Filter metrics for current period
