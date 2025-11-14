@@ -344,6 +344,33 @@
             background: #667eea;
             color: white;
         }
+        .case-study-box {
+            margin-top: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border: 2px solid #667eea;
+            border-radius: 12px;
+            display: none;
+        }
+        .case-study-box.visible {
+            display: block;
+        }
+        .case-study-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            max-height: 600px;
+            overflow-y: auto;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            font-family: 'Georgia', serif;
+            color: #333;
+        }
+        .case-study-actions {
+            display: flex;
+            gap: 15px;
+        }
         .no-data {
             text-align: center;
             padding: 60px 20px;
@@ -1112,8 +1139,20 @@
             // Action Buttons
             html += `
                 <div class="action-buttons">
-                    <button class="action-btn" onclick="copyToClipboard(this)">Copy JSON</button>
-                    <button class="action-btn" onclick="downloadReport()">Download Report</button>
+                    <button class="action-btn" onclick="generateCaseStudy()">Generate Case Study</button>
+                    <button class="action-btn" onclick="generateSlides()">Generate Slides</button>
+                </div>
+            `;
+            
+            // Case Study Box (initially hidden)
+            html += `
+                <div id="case-study-box" class="case-study-box">
+                    <h3 style="margin-top: 0; color: #667eea;">Generated Case Study</h3>
+                    <div id="case-study-content" class="case-study-content"></div>
+                    <div class="case-study-actions">
+                        <button class="action-btn" onclick="copyCaseStudy()">Copy Case Study</button>
+                        <button class="action-btn" onclick="regenerateCaseStudy()">Regenerate</button>
+                    </div>
                 </div>
             `;
             
@@ -1288,17 +1327,146 @@
             }
         }
         
-        function downloadReport() {
-            if (lastResponse) {
-                const dataStr = JSON.stringify(lastResponse, null, 2);
-                const dataBlob = new Blob([dataStr], {type: 'application/json'});
-                const url = URL.createObjectURL(dataBlob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `brand-snapshot-${Date.now()}.json`;
-                link.click();
-                URL.revokeObjectURL(url);
+        let generatedCaseStudy = '';
+        
+        function generateCaseStudy() {
+            if (!lastResponse) {
+                alert('No data available. Please generate a snapshot first.');
+                return;
             }
+            
+            const data = lastResponse;
+            const metadata = data.snapshot_metadata || {};
+            const comparison = metadata.comparison || {};
+            const coaching = data.coaching_activity || {};
+            const currentBehaviors = coaching.current?.top_behaviors || [];
+            
+            // Build case study content
+            let caseStudy = '';
+            
+            // Title
+            caseStudy += `${metadata.organization} - ${metadata.metric} Performance Case Study\n`;
+            caseStudy += `${comparison.current_period} vs ${comparison.previous_period}\n`;
+            caseStudy += '='.repeat(60) + '\n\n';
+            
+            // Executive Summary
+            caseStudy += 'EXECUTIVE SUMMARY\n';
+            caseStudy += '-'.repeat(60) + '\n';
+            if (data.ai_summary) {
+                caseStudy += data.ai_summary + '\n\n';
+            } else {
+                caseStudy += `${metadata.metric} ${comparison.percent_change && comparison.percent_change.includes('-') ? 'declined' : 'improved'} by ${Math.abs(parseFloat(comparison.percent_change || 0)).toFixed(1)}% `;
+                caseStudy += `from ${comparison.previous_value} to ${comparison.current_value} between ${comparison.previous_period} and ${comparison.current_period}.\n\n`;
+            }
+            
+            // Performance Metrics
+            caseStudy += 'PERFORMANCE METRICS\n';
+            caseStudy += '-'.repeat(60) + '\n';
+            caseStudy += `Metric: ${metadata.metric}\n`;
+            caseStudy += `Current Period (${comparison.current_period}): ${comparison.current_value}\n`;
+            caseStudy += `Previous Period (${comparison.previous_period}): ${comparison.previous_value}\n`;
+            caseStudy += `Change: ${comparison.change} (${comparison.percent_change})\n`;
+            caseStudy += `Programs Analyzed: ${metadata.programs_count}\n`;
+            caseStudy += `Data Points: ${metadata.data_quality?.total_metric_data_points || 'N/A'}\n\n`;
+            
+            // Coaching Activity
+            caseStudy += 'COACHING ACTIVITY OVERVIEW\n';
+            caseStudy += '-'.repeat(60) + '\n';
+            caseStudy += `Current Period (${coaching.current?.period_label || comparison.current_period}):\n`;
+            caseStudy += `  • Total Coaching Sessions: ${coaching.current?.total_coaching_sessions || 0}\n`;
+            caseStudy += `  • Effectiveness: ${coaching.current?.coaching_effectiveness || 'N/A'}\n\n`;
+            caseStudy += `Previous Period (${coaching.previous?.period_label || comparison.previous_period}):\n`;
+            caseStudy += `  • Total Coaching Sessions: ${coaching.previous?.total_coaching_sessions || 0}\n`;
+            caseStudy += `  • Effectiveness: ${coaching.previous?.coaching_effectiveness || 'N/A'}\n\n`;
+            caseStudy += `Change: ${coaching.change?.coaching_volume_change || 0} sessions (${coaching.change?.coaching_volume_change_pct || 'N/A'})\n`;
+            caseStudy += `Effectiveness Change: ${coaching.change?.effectiveness_change || 'N/A'}\n\n`;
+            
+            // Top Coaching Behaviors
+            if (currentBehaviors.length > 0) {
+                caseStudy += 'TOP COACHING BEHAVIORS\n';
+                caseStudy += '-'.repeat(60) + '\n';
+                currentBehaviors.forEach((behavior, index) => {
+                    caseStudy += `${index + 1}. ${behavior.behavior}\n`;
+                    caseStudy += `   Sessions: ${behavior.sessions} (${behavior.percent_of_total} of total)\n`;
+                    if (behavior.sub_behaviors && behavior.sub_behaviors.length > 0) {
+                        caseStudy += `   Key Focus Areas:\n`;
+                        behavior.sub_behaviors.forEach(sub => {
+                            caseStudy += `     • ${sub.sub_behavior}: ${sub.sessions} sessions (${sub.percent_of_behavior})\n`;
+                        });
+                    }
+                    caseStudy += '\n';
+                });
+            }
+            
+            // Key Insights
+            caseStudy += 'KEY INSIGHTS\n';
+            caseStudy += '-'.repeat(60) + '\n';
+            if (comparison.percent_change && !comparison.percent_change.includes('-')) {
+                caseStudy += `• Strong performance improvement of ${comparison.percent_change} demonstrates effective coaching strategies.\n`;
+            }
+            if (coaching.current?.total_coaching_sessions > 0) {
+                const topBehavior = currentBehaviors[0];
+                if (topBehavior) {
+                    caseStudy += `• Primary focus on "${topBehavior.behavior}" with ${topBehavior.sessions} sessions (${topBehavior.percent_of_total}) indicates strategic prioritization.\n`;
+                }
+            }
+            if (coaching.change?.coaching_volume_change_pct && !coaching.change.coaching_volume_change_pct.includes('-')) {
+                caseStudy += `• Increased coaching activity (${coaching.change.coaching_volume_change_pct}) shows commitment to performance improvement.\n`;
+            }
+            caseStudy += `• Analysis based on ${metadata.data_quality?.total_coaching_records || 0} coaching records across ${metadata.programs_count} programs.\n\n`;
+            
+            // Footer
+            caseStudy += '='.repeat(60) + '\n';
+            caseStudy += `Generated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\n`;
+            caseStudy += `Client: ${metadata.clients}\n`;
+            caseStudy += `Organization: ${metadata.organization}\n`;
+            
+            // Store and display
+            generatedCaseStudy = caseStudy;
+            const caseStudyBox = document.getElementById('case-study-box');
+            const caseStudyContent = document.getElementById('case-study-content');
+            
+            if (caseStudyBox && caseStudyContent) {
+                caseStudyContent.textContent = caseStudy;
+                caseStudyBox.classList.add('visible');
+                // Scroll to case study box
+                caseStudyBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+        
+        function copyCaseStudy() {
+            if (generatedCaseStudy) {
+                navigator.clipboard.writeText(generatedCaseStudy)
+                    .then(() => {
+                        const btn = document.querySelector('.case-study-actions .action-btn');
+                        if (btn) {
+                            const originalText = btn.textContent;
+                            btn.textContent = 'Copied!';
+                            btn.style.background = '#28a745';
+                            btn.style.color = 'white';
+                            setTimeout(() => {
+                                btn.textContent = originalText;
+                                btn.style.background = '';
+                                btn.style.color = '';
+                            }, 2000);
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy:', err);
+                        alert('Failed to copy case study to clipboard');
+                    });
+            } else {
+                alert('No case study generated. Please generate a case study first.');
+            }
+        }
+        
+        function regenerateCaseStudy() {
+            generateCaseStudy();
+        }
+        
+        function generateSlides() {
+            // Placeholder - does nothing as requested
+            console.log('Generate Slides clicked (no action)');
         }
         
         // Initialize client selection validation
