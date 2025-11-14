@@ -699,30 +699,37 @@ export async function processSnapshotData(params) {
     } : null
   });
   
-  // Add debug info to response (only in development or if no data found)
-  if (result.coaching_activity.current.total_coaching_sessions === 0 || process.env.NODE_ENV === 'development') {
-    result.debug_info = {
-      total_records_in_db: allBehavioralCoaching?.length || 0,
-      records_matching_org_year: orgYearMatches || 0,
-      filter_breakdown: {
-        client_matches: clientMatches || 0,
-        org_matches: orgMatches || 0,
-        metric_matches: metricMatches || 0,
-        month_matches: monthMatches || 0,
-        year_matches: yearMatches || 0
-      },
-      search_criteria: {
-        clients: params.clients,
-        organization: params.organization,
-        metric_name: params.metric_name,
-        current_coaching_months: currentCoachingPeriod,
-        previous_coaching_months: previousCoachingPeriod,
-        year: params.year
-      },
-      current_coaching_records: currentCoaching.length,
-      previous_coaching_records: previousCoaching.length
-    };
-  }
+  // Add debug info to response (always show for debugging)
+  result.debug_info = {
+    total_records_in_db: allBehavioralCoaching?.length || 0,
+    records_matching_org_year: orgYearMatches || 0,
+    filter_breakdown: {
+      client_matches: clientMatches || 0,
+      org_matches: orgMatches || 0,
+      metric_matches: metricMatches || 0,
+      month_matches: monthMatches || 0,
+      year_matches: yearMatches || 0
+    },
+    search_criteria: {
+      clients: params.clients,
+      organization: params.organization,
+      metric_name: params.metric_name,
+      normalized_metric_name: normalizedMetricName,
+      current_coaching_months: currentCoachingPeriod,
+      previous_coaching_months: previousCoachingPeriod,
+      year: params.year
+    },
+    current_coaching_records: currentCoaching.length,
+    previous_coaching_records: previousCoaching.length,
+    sample_db_record: allBehavioralCoaching && allBehavioralCoaching.length > 0 ? {
+      client: allBehavioralCoaching[0].client,
+      amplifai_org: allBehavioralCoaching[0].amplifai_org,
+      amplifai_metric: allBehavioralCoaching[0].amplifai_metric,
+      metric: allBehavioralCoaching[0].metric,
+      month: allBehavioralCoaching[0].month,
+      year: allBehavioralCoaching[0].year
+    } : null
+  };
   
   return result;
 }
