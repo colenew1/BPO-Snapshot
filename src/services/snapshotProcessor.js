@@ -246,35 +246,8 @@ export async function processSnapshotData(params) {
   ].filter(Boolean)); // Filter out null/undefined
   const programsCount = allPrograms.size;
   
-  // Helper function for flexible matching
-  const normalizeString = (str) => {
-    if (!str) return '';
-    return String(str).trim().toUpperCase();
-  };
-  
   // Normalize metric name for comparison (handle whitespace, case)
   const normalizedMetricName = normalizeString(params.metric_name);
-  
-  // Normalize month names (handle "Jun" vs "June", etc.)
-  const normalizeMonth = (month) => {
-    if (!month) return '';
-    const m = String(month).trim();
-    const monthMap = {
-      'JAN': 'JAN', 'JANUARY': 'JAN',
-      'FEB': 'FEB', 'FEBRUARY': 'FEB',
-      'MAR': 'MAR', 'MARCH': 'MAR',
-      'APR': 'APR', 'APRIL': 'APR',
-      'MAY': 'MAY',
-      'JUN': 'JUN', 'JUNE': 'JUN',
-      'JUL': 'JUL', 'JULY': 'JUL',
-      'AUG': 'AUG', 'AUGUST': 'AUG',
-      'SEP': 'SEP', 'SEPTEMBER': 'SEP',
-      'OCT': 'OCT', 'OCTOBER': 'OCT',
-      'NOV': 'NOV', 'NOVEMBER': 'NOV',
-      'DEC': 'DEC', 'DECEMBER': 'DEC'
-    };
-    return monthMap[m.toUpperCase()] || m.toUpperCase();
-  };
   
   const normalizedCurrentCoachingPeriod = currentCoachingPeriod.map(normalizeMonth);
   
