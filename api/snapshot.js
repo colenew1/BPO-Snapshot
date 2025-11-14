@@ -106,11 +106,22 @@ export default async function handler(req, res) {
     // Save to database (replicates "Snapshot" node)
     await saveSnapshot(snapshotData, params);
     
-    // Ensure debug_info is still there before sending
-    if (!snapshotData.debug_info) {
-      logger.error('WARNING: debug_info was removed before sending response!');
-      snapshotData.debug_info = { error: 'debug_info was missing' };
-    }
+    // Add debug_info at the VERY END so nothing can remove it
+    // Preserve existing debug_info if it exists, otherwise create basic one
+    const existingDebugInfo = snapshotData.debug_info || {};
+    
+    snapshotData.debug_info = {
+      ...existingDebugInfo,
+      added_at_end: true,
+      test_message: 'DEBUG_INFO_FORCE_ADDED_AT_END',
+      coaching_records_current: snapshotData.snapshot_metadata?.data_quality?.coaching_records_current || 0,
+      coaching_records_previous: snapshotData.snapshot_metadata?.data_quality?.coaching_records_previous || 0,
+      timestamp: new Date().toISOString()
+    };
+    
+    logger.info('Final response - has_debug_info:', !!snapshotData.debug_info);
+    logger.info('Final response keys:', Object.keys(snapshotData));
+    logger.info('Debug info keys:', snapshotData.debug_info ? Object.keys(snapshotData.debug_info) : 'none');
     
     // Return the data (will be used by frontend)
     return res.status(200).json(snapshotData);
