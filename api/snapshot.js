@@ -90,11 +90,13 @@ export default async function handler(req, res) {
     // Log what we're about to send to frontend
     logger.info('Snapshot data prepared for response:', {
       has_coaching_activity: !!snapshotData.coaching_activity,
+      has_debug_info: !!snapshotData.debug_info,
       current_sessions: snapshotData.coaching_activity?.current?.total_coaching_sessions || 0,
       current_behaviors: snapshotData.coaching_activity?.current?.top_behaviors?.length || 0,
       previous_sessions: snapshotData.coaching_activity?.previous?.total_coaching_sessions || 0,
       previous_behaviors: snapshotData.coaching_activity?.previous?.top_behaviors?.length || 0,
-      current_behaviors_sample: snapshotData.coaching_activity?.current?.top_behaviors?.[0]?.behavior || 'none'
+      current_behaviors_sample: snapshotData.coaching_activity?.current?.top_behaviors?.[0]?.behavior || 'none',
+      debug_info_keys: snapshotData.debug_info ? Object.keys(snapshotData.debug_info) : 'none'
     });
     
     // Generate AI summary (replicates "AI Summary" node)
@@ -103,6 +105,12 @@ export default async function handler(req, res) {
     
     // Save to database (replicates "Snapshot" node)
     await saveSnapshot(snapshotData, params);
+    
+    // Ensure debug_info is still there before sending
+    if (!snapshotData.debug_info) {
+      logger.error('WARNING: debug_info was removed before sending response!');
+      snapshotData.debug_info = { error: 'debug_info was missing' };
+    }
     
     // Return the data (will be used by frontend)
     return res.status(200).json(snapshotData);

@@ -704,8 +704,8 @@ export async function processSnapshotData(params) {
   });
   
   // Add debug info to response (always show for debugging)
-  // Make sure variables are in scope
-  const debugInfo = {
+  // Make sure variables are in scope - add it directly to result object
+  result.debug_info = {
     total_records_in_db: allBehavioralCoaching?.length || 0,
     records_matching_org_year: orgYearMatches || 0,
     filter_breakdown: {
@@ -734,14 +734,11 @@ export async function processSnapshotData(params) {
       month: allBehavioralCoaching[0].month,
       year: allBehavioralCoaching[0].year
     } : null,
-    // Add more diagnostic info
-    db_query_success: !coachingError,
-    db_error: coachingError ? coachingError.message : null,
-    all_behavioral_coaching_length: allBehavioralCoaching?.length || 0
+    test_message: 'DEBUG_INFO_IS_WORKING'
   };
   
-  result.debug_info = debugInfo;
-  logger.info('Debug info being added to response:', JSON.stringify(debugInfo, null, 2));
+  logger.info('Debug info added to result:', JSON.stringify(result.debug_info, null, 2));
+  logger.info('Result keys:', Object.keys(result));
   
   return result;
 }
