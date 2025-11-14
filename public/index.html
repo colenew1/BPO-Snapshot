@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Brand Snapshot Dashboard v3</title>
+    <title>Brand Snapshot Dashboard</title>
     <style>
         * {
             margin: 0;
@@ -573,7 +573,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Brand Snapshot Dashboard v3</h1>
+            <h1>Brand Snapshot Dashboard</h1>
             <p>Performance + Coaching Intelligence</p>
         </div>
         <div class="main-content">
@@ -583,17 +583,17 @@
                     <div class="form-group">
                         <label>Select Clients *</label>
                         <div class="client-checkboxes">
-                            <div class="checkbox-item" data-client="TTEC">
-                                <input type="checkbox" id="client-ttec" value="TTEC">
-                                <label for="client-ttec">TTEC</label>
-                            </div>
                             <div class="checkbox-item" data-client="Alorica">
                                 <input type="checkbox" id="client-alorica" value="Alorica">
-                                <label for="client-alorica">Alorica</label>
+                                <label for="client-alorica">BPO 1</label>
                             </div>
                             <div class="checkbox-item" data-client="TP">
                                 <input type="checkbox" id="client-tp" value="TP">
-                                <label for="client-tp">TP</label>
+                                <label for="client-tp">BPO 2</label>
+                            </div>
+                            <div class="checkbox-item" data-client="TTEC">
+                                <input type="checkbox" id="client-ttec" value="TTEC">
+                                <label for="client-ttec">BPO 3</label>
                             </div>
                         </div>
                         <div id="client-error" class="error-message" style="display: none;">
@@ -1454,6 +1454,25 @@
         function generateSlides() {
             // Placeholder - does nothing as requested
             console.log('Generate Slides clicked (no action)');
+        }
+        
+        // Client name mapping: real names for backend, generic names for display
+        const clientNameMap = {
+            'Alorica': 'BPO 1',
+            'TP': 'BPO 2',
+            'TTEC': 'BPO 3'
+        };
+        
+        // Function to convert real client name(s) to generic display name(s)
+        function getGenericClientName(clientName) {
+            if (typeof clientName === 'string') {
+                return clientNameMap[clientName] || clientName;
+            }
+            // Handle comma-separated string
+            if (clientName && clientName.includes(',')) {
+                return clientName.split(',').map(c => clientNameMap[c.trim()] || c.trim()).join(', ');
+            }
+            return clientName;
         }
         
         // Initialize client selection validation
