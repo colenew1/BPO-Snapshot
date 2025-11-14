@@ -821,6 +821,9 @@
                     ? 'http://localhost:3000/api/snapshot'
                     : '/api/snapshot';
                 
+                console.log('Making API request to:', apiUrl);
+                console.log('Request payload:', formData);
+                
                 // Make API call
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -828,6 +831,10 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify(formData)
+                }).catch(fetchError => {
+                    // Handle network errors (CORS, connection refused, etc.)
+                    console.error('Fetch error details:', fetchError);
+                    throw new Error(`Network error: ${fetchError.message}. Please check if the API endpoint is accessible.`);
                 });
                 
                 if (!response.ok) {
