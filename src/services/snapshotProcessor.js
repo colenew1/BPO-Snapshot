@@ -74,6 +74,54 @@ export async function processSnapshotData(params) {
   
   logger.info(`Fetched ${allBehavioralCoaching?.length || 0} total coaching records for ${params.organization} in ${params.year}`);
   
+  // DEBUG: See what we actually got from database
+  if (allBehavioralCoaching && allBehavioralCoaching.length > 0) {
+    // Get unique values to see what's available
+    const sampleRecord = allBehavioralCoaching[0];
+    const uniqueClients = [...new Set(allBehavioralCoaching.map(r => r.client))];
+    const uniqueMetrics = [...new Set(allBehavioralCoaching.map(r => r.amplifai_metric))];
+    const uniqueMonths = [...new Set(allBehavioralCoaching.map(r => r.month))];
+    
+    logger.info('Sample record from DB:', {
+      client: sampleRecord.client,
+      amplifai_org: sampleRecord.amplifai_org,
+      amplifai_metric: sampleRecord.amplifai_metric,
+      month: sampleRecord.month,
+      year: sampleRecord.year,
+      behavior: sampleRecord.behavior
+    });
+    
+    logger.info('Available values in DB:', {
+      clients: uniqueClients,
+      metrics: uniqueMetrics,
+      months: uniqueMonths.sort()
+    });
+    
+    logger.info('Filter criteria:', {
+      lookingForClients: params.clients,
+      lookingForOrg: params.organization,
+      lookingForMetric: params.metric_name,
+      lookingForMonths: currentCoachingPeriod,
+      lookingForYear: params.year
+    });
+    
+    // Check how many match each filter
+    const clientMatches = allBehavioralCoaching.filter(r => params.clients.includes(r.client)).length;
+    const orgMatches = allBehavioralCoaching.filter(r => r.amplifai_org === params.organization).length;
+    const metricMatches = allBehavioralCoaching.filter(r => r.amplifai_metric === params.metric_name).length;
+    const monthMatches = allBehavioralCoaching.filter(r => currentCoachingPeriod.includes(r.month)).length;
+    
+    logger.info('Filter match counts:', {
+      clientMatches,
+      orgMatches,
+      metricMatches,
+      monthMatches,
+      totalRecords: allBehavioralCoaching.length
+    });
+  } else {
+    logger.warn('No coaching records found in database at all!');
+  }
+  
   // Filter metrics for current period
   const currentMetrics = (allMonthlyMetrics || []).filter(item => {
     return params.clients.includes(item.client) &&
@@ -106,22 +154,35 @@ export async function processSnapshotData(params) {
   const programsCount = new Set(currentMetrics.map(item => item.program)).size;
   
   // Filter coaching for SHIFTED current period
+  // Note: This matches the n8n workflow logic exactly
   const currentCoaching = (allBehavioralCoaching || []).filter(item => {
-    return params.clients.includes(item.client) &&
-           item.amplifai_org === params.organization &&
-           item.amplifai_metric === params.metric_name &&
-           currentCoachingPeriod.includes(item.month) &&
-           item.year === params.year;
+    const clientMatch = params.clients.includes(item.client);
+    const orgMatch = item.amplifai_org === params.organization;
+    const metricMatch = item.amplifai_metric === params.metric_name;
+    const monthMatch = currentCoachingPeriod.includes(item.month);
+    const yearMatch = item.year === params.year;
+    
+    // Debug individual filter failures
+    if (!clientMatch && orgMatch && metricMatch && monthMatch && yearMatch) {
+      logger.debug(`Coaching record filtered out: client mismatch. Record client: "${item.client}", Looking for: ${JSON.stringify(params.clients)}`);
+    }
+    if (!orgMatch && clientMatch && metricMatch && monthMatch && yearMatch) {
+      logger.debug(`Coaching record filtered out: org mismatch. Record org: "${item.amplifai_org}", Looking for: "${params.organization}"`);
+    }
+    if (!metricMatch && clientMatch && orgMatch && monthMatch && yearMatch) {
+      logger.debug(`Coaching record filtered out: metric mismatch. Record metric: "${item.amplifai_metric}", Looking for: "${params.metric_name}"`);
+    }
+    if (!monthMatch && clientMatch && orgMatch && metricMatch && yearMatch) {
+      logger.debug(`Coaching record filtered out: month mismatch. Record month: "${item.month}", Looking for: ${currentCoachingPeriod.join(', ')}`);
+    }
+    
+    return clientMatch && orgMatch && metricMatch && monthMatch && yearMatch;
   });
   
   logger.info(`Current coaching period: ${currentCoachingPeriod.join(', ')}, found ${currentCoaching.length} records`);
-  logger.debug('Current coaching filter:', {
-    clients: params.clients,
-    organization: params.organization,
-    metric: params.metric_name,
-    months: currentCoachingPeriod,
-    year: params.year
-  });
+  if (currentCoaching.length === 0 && allBehavioralCoaching && allBehavioralCoaching.length > 0) {
+    logger.warn('No coaching records matched filters! Check the debug logs above for mismatch reasons.');
+  }
   
   // Filter coaching for SHIFTED previous period
   const previousCoaching = (allBehavioralCoaching || []).filter(item => {
@@ -133,6 +194,9 @@ export async function processSnapshotData(params) {
   });
   
   logger.info(`Previous coaching period: ${previousCoachingPeriod.join(', ')}, found ${previousCoaching.length} records`);
+  if (previousCoaching.length === 0 && allBehavioralCoaching && allBehavioralCoaching.length > 0) {
+    logger.warn('No previous period coaching records matched filters!');
+  }
   
   // Calculate coaching summaries
   const currentSessions = currentCoaching.reduce((sum, item) => sum + (item.coaching_count || 0), 0);
