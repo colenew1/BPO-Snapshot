@@ -79,6 +79,25 @@ export async function processSnapshotData(params) {
     return monthMap[m.toUpperCase()] || m.toUpperCase();
   };
   
+  // Normalize behavior names for case-insensitive matching
+  // Returns: { normalized: lowercase key for matching, display: title-case for display }
+  const normalizeBehaviorName = (behavior) => {
+    if (!behavior) return { normalized: '', display: '' };
+    const trimmed = String(behavior).trim();
+    if (!trimmed) return { normalized: '', display: '' };
+    
+    // Normalized key (lowercase for matching)
+    const normalized = trimmed.toLowerCase();
+    
+    // Display name (title case: capitalize first letter of each word)
+    const display = trimmed
+      .split(/\s+/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+    
+    return { normalized, display };
+  };
+  
   // Fetch monthly metrics
   logger.info(`Fetching monthly_metrics for org: ${params.organization}, year: ${params.year}`);
   const { data: allMonthlyMetrics, error: metricsError } = await supabase
@@ -573,21 +592,30 @@ export async function processSnapshotData(params) {
     : null;
   
   // Helper function to get sub-behaviors for a behavior
-  // This matches the n8n workflow exactly
+  // This matches the n8n workflow exactly, with case-insensitive behavior matching
   const getSubBehaviors = (coachingData, behaviorName) => {
     const subBehaviorCounts = {};
     let totalForBehavior = 0;
     
-    // First pass: count all sessions for this behavior
+    // Normalize the behavior name for case-insensitive matching
+    const normalizedBehavior = normalizeBehaviorName(behaviorName).normalized;
+    
+    // First pass: count all sessions for this behavior (case-insensitive)
     coachingData
-      .filter(item => item.behavior === behaviorName)
+      .filter(item => {
+        if (!item.behavior) return false;
+        return normalizeBehaviorName(item.behavior).normalized === normalizedBehavior;
+      })
       .forEach(item => {
         totalForBehavior += (item.coaching_count || 0);
       });
     
-    // Second pass: count by sub-behavior
+    // Second pass: count by sub-behavior (case-insensitive behavior matching)
     coachingData
-      .filter(item => item.behavior === behaviorName && item.sub_behavior)
+      .filter(item => {
+        if (!item.behavior || !item.sub_behavior) return false;
+        return normalizeBehaviorName(item.behavior).normalized === normalizedBehavior;
+      })
       .forEach(item => {
         const subBehavior = item.sub_behavior;
         const count = item.coaching_count || 0;
@@ -606,30 +634,42 @@ export async function processSnapshotData(params) {
   };
   
   // Top behaviors for current period WITH SUB-BEHAVIORS
+  // Use case-insensitive aggregation to combine variations like "Active listening" and "Active Listening"
   logger.info('Starting behavior aggregation for current period...');
-  const behaviorCounts = {};
+  const behaviorCounts = {}; // Key: normalized behavior name, Value: { count, displayName }
+  const behaviorDisplayNames = {}; // Track canonical display names (prefer title case)
+  
   currentCoaching.forEach(item => {
     const behavior = item.behavior;
     if (behavior) {
+      const { normalized, display } = normalizeBehaviorName(behavior);
       const count = Number(item.coaching_count) || 0;
-      behaviorCounts[behavior] = (behaviorCounts[behavior] || 0) + count;
-      logger.debug(`Behavior "${behavior}": adding ${count}, total now: ${behaviorCounts[behavior]}`);
+      
+      // Aggregate by normalized key
+      if (!behaviorCounts[normalized]) {
+        behaviorCounts[normalized] = 0;
+        behaviorDisplayNames[normalized] = display;
+      }
+      behaviorCounts[normalized] += count;
+      
+      logger.debug(`Behavior "${behavior}" (normalized: "${normalized}"): adding ${count}, total now: ${behaviorCounts[normalized]}`);
     } else {
       logger.warn(`Record with no behavior: ${JSON.stringify(item)}`);
     }
   });
   
-  logger.info(`Found ${Object.keys(behaviorCounts).length} unique behaviors in current period`);
+  logger.info(`Found ${Object.keys(behaviorCounts).length} unique behaviors in current period (case-insensitive)`);
   logger.info(`Behavior counts: ${JSON.stringify(Object.entries(behaviorCounts).sort((a, b) => b[1] - a[1]).slice(0, 5))}`);
   
   const topBehaviors = Object.entries(behaviorCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-    .map(([behavior, count]) => {
-      const subBehaviors = getSubBehaviors(currentCoaching, behavior);
-      logger.debug(`Processing behavior "${behavior}": ${count} sessions, ${subBehaviors.length} sub-behaviors`);
+    .map(([normalizedBehavior, count]) => {
+      const displayName = behaviorDisplayNames[normalizedBehavior];
+      const subBehaviors = getSubBehaviors(currentCoaching, displayName);
+      logger.debug(`Processing behavior "${displayName}" (normalized: "${normalizedBehavior}"): ${count} sessions, ${subBehaviors.length} sub-behaviors`);
       return {
-        behavior,
+        behavior: displayName, // Use canonical display name
         sessions: count,
         percent_of_total: currentSessions > 0 ? ((count / currentSessions) * 100).toFixed(1) + '%' : '0%',
         sub_behaviors: subBehaviors
@@ -652,23 +692,37 @@ export async function processSnapshotData(params) {
   }
   
   // Top behaviors for previous period WITH SUB-BEHAVIORS
-  const prevBehaviorCounts = {};
+  // Use case-insensitive aggregation to combine variations like "Active listening" and "Active Listening"
+  const prevBehaviorCounts = {}; // Key: normalized behavior name, Value: count
+  const prevBehaviorDisplayNames = {}; // Track canonical display names (prefer title case)
+  
   previousCoaching.forEach(item => {
     const behavior = item.behavior;
     if (behavior) {
-      prevBehaviorCounts[behavior] = (prevBehaviorCounts[behavior] || 0) + (item.coaching_count || 0);
+      const { normalized, display } = normalizeBehaviorName(behavior);
+      const count = Number(item.coaching_count) || 0;
+      
+      // Aggregate by normalized key
+      if (!prevBehaviorCounts[normalized]) {
+        prevBehaviorCounts[normalized] = 0;
+        prevBehaviorDisplayNames[normalized] = display;
+      }
+      prevBehaviorCounts[normalized] += count;
     }
   });
   
   const prevTopBehaviors = Object.entries(prevBehaviorCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-    .map(([behavior, count]) => ({
-      behavior,
-      sessions: count,
-      percent_of_total: previousSessions > 0 ? ((count / previousSessions) * 100).toFixed(1) + '%' : '0%',
-      sub_behaviors: getSubBehaviors(previousCoaching, behavior)
-    }));
+    .map(([normalizedBehavior, count]) => {
+      const displayName = prevBehaviorDisplayNames[normalizedBehavior];
+      return {
+        behavior: displayName, // Use canonical display name
+        sessions: count,
+        percent_of_total: previousSessions > 0 ? ((count / previousSessions) * 100).toFixed(1) + '%' : '0%',
+        sub_behaviors: getSubBehaviors(previousCoaching, displayName)
+      };
+    });
   
   // Build output matching n8n format exactly
   const result = {
