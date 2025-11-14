@@ -203,12 +203,12 @@ export async function processSnapshotData(params) {
   const programsCount = new Set(currentMetrics.map(item => item.program)).size;
   
   // Filter coaching for SHIFTED current period
-  // Priority: amplifai_metric (standardized) for exact match, fallback to metric (original) with variation matching
+  // Match n8n exactly: uses exact match on amplifai_metric (no variation matching needed since it's standardized)
   const currentCoaching = (allBehavioralCoaching || []).filter(item => {
     const clientMatch = params.clients.includes(item.client);
     const orgMatch = item.amplifai_org === params.organization;
-    // Check amplifai_metric first (standardized), then metric field (with variations) if amplifai_metric is empty
-    const metricMatch = metricMatches(item.amplifai_metric, item.metric, params.metric_name);
+    // n8n uses exact match: row.amplifai_metric === params.metric_name
+    const metricMatch = item.amplifai_metric === params.metric_name;
     const monthMatch = currentCoachingPeriod.includes(item.month);
     const yearMatch = item.year === params.year;
     
@@ -235,11 +235,11 @@ export async function processSnapshotData(params) {
   }
   
   // Filter coaching for SHIFTED previous period
-  // Priority: amplifai_metric (standardized) for exact match, fallback to metric (original) with variation matching
+  // Match n8n exactly: uses exact match on amplifai_metric
   const previousCoaching = (allBehavioralCoaching || []).filter(item => {
     return params.clients.includes(item.client) &&
            item.amplifai_org === params.organization &&
-           metricMatches(item.amplifai_metric, item.metric, params.metric_name) &&
+           item.amplifai_metric === params.metric_name &&
            previousCoachingPeriod.includes(item.month) &&
            item.year === params.year;
   });
@@ -273,6 +273,7 @@ export async function processSnapshotData(params) {
     : null;
   
   // Helper function to get sub-behaviors for a behavior
+  // This matches the n8n workflow exactly
   const getSubBehaviors = (coachingData, behaviorName) => {
     const subBehaviorCounts = {};
     let totalForBehavior = 0;
@@ -293,14 +294,14 @@ export async function processSnapshotData(params) {
         subBehaviorCounts[subBehavior] = (subBehaviorCounts[subBehavior] || 0) + count;
       });
     
-    // Sort and return top 3
+    // Sort and return top 3 - match n8n format exactly
     return Object.entries(subBehaviorCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
       .map(([subBehavior, count]) => ({
-        name: subBehavior,
+        sub_behavior: subBehavior,  // n8n uses sub_behavior, not name
         sessions: count,
-        percent: totalForBehavior > 0 ? ((count / totalForBehavior) * 100).toFixed(1) + '%' : '0%'
+        percent_of_behavior: totalForBehavior > 0 ? ((count / totalForBehavior) * 100).toFixed(1) + '%' : '0%'  // n8n uses percent_of_behavior
       }));
   };
   

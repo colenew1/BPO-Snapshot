@@ -1183,8 +1183,8 @@
                                 </div>
                                 ${behavior.sub_behaviors && behavior.sub_behaviors.length > 0 ? behavior.sub_behaviors.map(subBehavior => `
                                     <div class="sub-behavior-item">
-                                        <div class="sub-behavior-name">• ${subBehavior.name}</div>
-                                        <div class="sub-behavior-stats">${subBehavior.sessions} sessions (${subBehavior.percent})</div>
+                                        <div class="sub-behavior-name">• ${subBehavior.sub_behavior || subBehavior.name || 'Unknown'}</div>
+                                        <div class="sub-behavior-stats">${subBehavior.sessions} sessions (${subBehavior.percent_of_behavior || subBehavior.percent || '0%'})</div>
                                     </div>
                                 `).join('') : `
                                     <div class="coming-soon">
