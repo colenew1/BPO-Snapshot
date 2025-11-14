@@ -50,33 +50,46 @@ export async function processSnapshotData(params) {
   // Helper: Check if value is valid
   const isValid = (v) => v !== null && v !== undefined && v !== '' && !isNaN(Number(v));
   
-  // Helper: Check if a metric name matches (handles variations like "UES-NPS COMPOSITE SCORE" matching "NPS")
-  const metricMatches = (dbMetric, searchMetric) => {
-    if (!dbMetric || !searchMetric) return false;
+  // Helper: Check if a metric name matches
+  // amplifai_metric is standardized, so use exact match
+  // metric field may have variations, so use flexible matching
+  const metricMatches = (amplifaiMetric, originalMetric, searchMetric) => {
+    if (!searchMetric) return false;
     
-    // Exact match
-    if (dbMetric === searchMetric) return true;
+    // First priority: Check amplifai_metric (standardized field) - exact match
+    if (amplifaiMetric && amplifaiMetric === searchMetric) return true;
     
-    // Case-insensitive match
-    if (dbMetric.toUpperCase() === searchMetric.toUpperCase()) return true;
+    // Case-insensitive match for amplifai_metric
+    if (amplifaiMetric && amplifaiMetric.toUpperCase() === searchMetric.toUpperCase()) return true;
     
-    // Check if search metric is contained in db metric (e.g., "NPS" in "UES-NPS COMPOSITE SCORE")
-    if (dbMetric.toUpperCase().includes(searchMetric.toUpperCase())) return true;
+    // Second priority: Check original metric field with variation matching (only if amplifai_metric is null/empty)
+    if (!amplifaiMetric && originalMetric) {
+      // Exact match
+      if (originalMetric === searchMetric) return true;
+      
+      // Case-insensitive match
+      if (originalMetric.toUpperCase() === searchMetric.toUpperCase()) return true;
+      
+      // Check if search metric is contained in original metric (e.g., "NPS" in "UES-NPS COMPOSITE SCORE")
+      if (originalMetric.toUpperCase().includes(searchMetric.toUpperCase())) return true;
+      
+      // Check standardized metric mappings for original metric field
+      const metricMappings = {
+        'NPS': ['NPS', 'CHAT NPS', 'IB NPS', 'NPS RATING', 'UES-NPS COMPOSITE SCORE'],
+        'AHT': ['AHT', 'AVERAGE HANDLE TIME', 'AVE HANDLE TIME'],
+        'QA': ['QA', 'QUALITY', 'QA SCORE', 'QUALITY SCORE'],
+        'CSAT': ['CSAT', 'C-SAT', 'CSAT%'],
+        'FCR': ['FCR', 'FIRST CALL RESOLUTION', 'FCR36'],
+        'TRANSFER_RATE': ['TRANSFER RATE', 'TRANSFER%', 'TRANSFERS'],
+        'ATTENDANCE': ['ATTENDANCE', 'ATTENDANCE %', 'RELIABILITY'],
+        'RELEASE_RATE': ['RELEASE RATE', 'RELEASE %']
+      };
+      
+      const variations = metricMappings[searchMetric] || [searchMetric];
+      return variations.some(v => originalMetric.toUpperCase().includes(v.toUpperCase()));
+    }
     
-    // Check standardized metric mappings
-    const metricMappings = {
-      'NPS': ['NPS', 'CHAT NPS', 'IB NPS', 'NPS RATING', 'UES-NPS COMPOSITE SCORE'],
-      'AHT': ['AHT', 'AVERAGE HANDLE TIME', 'AVE HANDLE TIME'],
-      'QA': ['QA', 'QUALITY', 'QA SCORE', 'QUALITY SCORE'],
-      'CSAT': ['CSAT', 'C-SAT', 'CSAT%'],
-      'FCR': ['FCR', 'FIRST CALL RESOLUTION', 'FCR36'],
-      'TRANSFER_RATE': ['TRANSFER RATE', 'TRANSFER%', 'TRANSFERS'],
-      'ATTENDANCE': ['ATTENDANCE', 'ATTENDANCE %', 'RELIABILITY'],
-      'RELEASE_RATE': ['RELEASE RATE', 'RELEASE %']
-    };
-    
-    const variations = metricMappings[searchMetric] || [searchMetric];
-    return variations.some(v => dbMetric.toUpperCase().includes(v.toUpperCase()));
+    return false;
   };
   
   // Fetch monthly metrics
@@ -143,7 +156,7 @@ export async function processSnapshotData(params) {
     const orgMatches = allBehavioralCoaching.filter(r => r.amplifai_org === params.organization).length;
     // Check both amplifai_metric and metric fields for matching (with metric name variations)
     const metricMatchesCount = allBehavioralCoaching.filter(r => 
-      metricMatches(r.amplifai_metric, params.metric_name) || metricMatches(r.metric, params.metric_name)
+      metricMatches(r.amplifai_metric, r.metric, params.metric_name)
     ).length;
     const monthMatches = allBehavioralCoaching.filter(r => currentCoachingPeriod.includes(r.month)).length;
     
@@ -190,14 +203,12 @@ export async function processSnapshotData(params) {
   const programsCount = new Set(currentMetrics.map(item => item.program)).size;
   
   // Filter coaching for SHIFTED current period
-  // Note: Check both amplifai_metric and metric fields (some records may use metric instead)
-  // Also handle metric name variations (e.g., "UES-NPS COMPOSITE SCORE" matches "NPS")
+  // Priority: amplifai_metric (standardized) for exact match, fallback to metric (original) with variation matching
   const currentCoaching = (allBehavioralCoaching || []).filter(item => {
     const clientMatch = params.clients.includes(item.client);
     const orgMatch = item.amplifai_org === params.organization;
-    // Check both amplifai_metric and metric fields with variation matching
-    const metricMatch = metricMatches(item.amplifai_metric, params.metric_name) || 
-                        metricMatches(item.metric, params.metric_name);
+    // Check amplifai_metric first (standardized), then metric field (with variations) if amplifai_metric is empty
+    const metricMatch = metricMatches(item.amplifai_metric, item.metric, params.metric_name);
     const monthMatch = currentCoachingPeriod.includes(item.month);
     const yearMatch = item.year === params.year;
     
@@ -224,12 +235,11 @@ export async function processSnapshotData(params) {
   }
   
   // Filter coaching for SHIFTED previous period
-  // Check both amplifai_metric and metric fields with variation matching
+  // Priority: amplifai_metric (standardized) for exact match, fallback to metric (original) with variation matching
   const previousCoaching = (allBehavioralCoaching || []).filter(item => {
     return params.clients.includes(item.client) &&
            item.amplifai_org === params.organization &&
-           (metricMatches(item.amplifai_metric, params.metric_name) || 
-            metricMatches(item.metric, params.metric_name)) &&
+           metricMatches(item.amplifai_metric, item.metric, params.metric_name) &&
            previousCoachingPeriod.includes(item.month) &&
            item.year === params.year;
   });
