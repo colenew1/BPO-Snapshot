@@ -289,9 +289,18 @@ export async function processSnapshotData(params) {
     const metricFieldMatch = normalizeString(item.metric) === normalizedMetricName;
     const metricMatch = amplifaiMetricMatch || metricFieldMatch;
     
+    // Normalize both the item month and the search months for comparison
     const normalizedItemMonth = normalizeMonth(item.month);
-    const monthMatch = normalizedCurrentCoachingPeriod.includes(normalizedItemMonth);
+    // Also try direct match in case normalization isn't needed
+    const directMonthMatch = currentCoachingPeriod.includes(item.month);
+    const normalizedMonthMatch = normalizedCurrentCoachingPeriod.includes(normalizedItemMonth);
+    const monthMatch = directMonthMatch || normalizedMonthMatch;
     const yearMatch = item.year === params.year;
+    
+    // Log month matching details for debugging
+    if (clientMatch && orgMatch && metricMatch && yearMatch && !monthMatch) {
+      logger.debug(`Month mismatch - Record month: "${item.month}" (normalized: ${normalizedItemMonth}), Looking for: ${currentCoachingPeriod.join(', ')} (normalized: ${normalizedCurrentCoachingPeriod.join(', ')})`);
+    }
     
     // Debug individual filter failures
     if (!clientMatch && orgMatch && metricMatch && monthMatch && yearMatch) {
@@ -302,9 +311,6 @@ export async function processSnapshotData(params) {
     }
     if (!metricMatch && clientMatch && orgMatch && monthMatch && yearMatch) {
       logger.debug(`Coaching record filtered out: metric mismatch. Record amplifai_metric: "${item.amplifai_metric}", Record metric: "${item.metric}", Looking for: "${params.metric_name}"`);
-    }
-    if (!monthMatch && clientMatch && orgMatch && metricMatch && yearMatch) {
-      logger.debug(`Coaching record filtered out: month mismatch. Record month: "${item.month}" (normalized: ${normalizedItemMonth}), Looking for: ${currentCoachingPeriod.join(', ')} (normalized: ${normalizedCurrentCoachingPeriod.join(', ')})`);
     }
     
     return clientMatch && orgMatch && metricMatch && monthMatch && yearMatch;
@@ -349,9 +355,18 @@ export async function processSnapshotData(params) {
     const metricFieldMatch = normalizeString(item.metric) === normalizedMetricName;
     const metricMatch = amplifaiMetricMatch || metricFieldMatch;
     
+    // Normalize both the item month and the search months for comparison
     const normalizedItemMonth = normalizeMonth(item.month);
-    const monthMatch = normalizedPreviousCoachingPeriod.includes(normalizedItemMonth);
+    // Also try direct match in case normalization isn't needed
+    const directMonthMatch = previousCoachingPeriod.includes(item.month);
+    const normalizedMonthMatch = normalizedPreviousCoachingPeriod.includes(normalizedItemMonth);
+    const monthMatch = directMonthMatch || normalizedMonthMatch;
     const yearMatch = item.year === params.year;
+    
+    // Log month matching details for debugging
+    if (clientMatch && orgMatch && metricMatch && yearMatch && !monthMatch) {
+      logger.debug(`Previous period month mismatch - Record month: "${item.month}" (normalized: ${normalizedItemMonth}), Looking for: ${previousCoachingPeriod.join(', ')} (normalized: ${normalizedPreviousCoachingPeriod.join(', ')})`);
+    }
     
     return clientMatch && orgMatch && metricMatch && monthMatch && yearMatch;
   });
