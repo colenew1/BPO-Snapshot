@@ -13,6 +13,7 @@ export async function processSnapshotData(params) {
   if (params.comparison_type === 'month') {
     currentPeriod = [params.current_month];
     previousPeriod = [params.previous_month];
+    logger.info(`Input periods - Current: ${currentPeriod.join(', ')}, Previous: ${previousPeriod.join(', ')}`);
   } else {
     // Quarter mapping
     const quarterMonths = {
@@ -39,6 +40,7 @@ export async function processSnapshotData(params) {
   if (params.comparison_type === 'month') {
     currentCoachingPeriod = currentPeriod.map(shiftMonthBack);
     previousCoachingPeriod = previousPeriod.map(shiftMonthBack);
+    logger.info(`Coaching periods (shifted back 1 month) - Current: ${currentCoachingPeriod.join(', ')}, Previous: ${previousCoachingPeriod.join(', ')}`);
   } else {
     currentCoachingPeriod = previousPeriod;
     previousCoachingPeriod = previousPeriod.map(m => {
@@ -309,8 +311,29 @@ export async function processSnapshotData(params) {
   });
   
   logger.info(`Current coaching period: ${currentCoachingPeriod.join(', ')}, found ${currentCoaching.length} records`);
+  logger.info(`Normalized current coaching period: ${normalizedCurrentCoachingPeriod.join(', ')}`);
+  
+  // Log what months are actually in the filtered coaching data
+  if (currentCoaching.length > 0) {
+    const monthsInResults = [...new Set(currentCoaching.map(r => r.month))];
+    const normalizedMonthsInResults = [...new Set(currentCoaching.map(r => normalizeMonth(r.month)))];
+    logger.info(`Months found in current coaching results: ${monthsInResults.join(', ')} (normalized: ${normalizedMonthsInResults.join(', ')})`);
+  }
+  
   if (currentCoaching.length === 0 && allBehavioralCoaching && allBehavioralCoaching.length > 0) {
     logger.warn('No coaching records matched filters! Check the debug logs above for mismatch reasons.');
+    // Show what months are available in the database for this org/year/metric
+    const availableMonthsForMetric = [...new Set(allBehavioralCoaching
+      .filter(r => {
+        const orgMatch = normalizeString(r.amplifai_org) === normalizeString(params.organization);
+        const yearMatch = r.year === params.year;
+        const amplifaiMetricMatch = normalizeString(r.amplifai_metric) === normalizedMetricName;
+        const metricFieldMatch = normalizeString(r.metric) === normalizedMetricName;
+        return orgMatch && yearMatch && (amplifaiMetricMatch || metricFieldMatch);
+      })
+      .map(r => r.month))];
+    logger.warn(`Available months in DB for ${params.organization}/${params.metric_name}/${params.year}: ${availableMonthsForMetric.sort().join(', ')}`);
+    logger.warn(`Looking for months: ${currentCoachingPeriod.join(', ')} (normalized: ${normalizedCurrentCoachingPeriod.join(', ')})`);
   }
   
   // Filter coaching for SHIFTED previous period
@@ -334,9 +357,18 @@ export async function processSnapshotData(params) {
   });
   
   logger.info(`Previous coaching period: ${previousCoachingPeriod.join(', ')}, found ${previousCoaching.length} records`);
+  logger.info(`Normalized previous coaching period: ${normalizedPreviousCoachingPeriod.join(', ')}`);
+  
+  // Log what months are actually in the filtered coaching data
+  if (previousCoaching.length > 0) {
+    const monthsInResults = [...new Set(previousCoaching.map(r => r.month))];
+    const normalizedMonthsInResults = [...new Set(previousCoaching.map(r => normalizeMonth(r.month)))];
+    logger.info(`Months found in previous coaching results: ${monthsInResults.join(', ')} (normalized: ${normalizedMonthsInResults.join(', ')})`);
+  }
+  
   if (previousCoaching.length === 0 && allBehavioralCoaching && allBehavioralCoaching.length > 0) {
     logger.warn('No previous period coaching records matched filters!');
-    logger.warn(`Looking for months: ${previousCoachingPeriod.join(', ')}, Year: ${params.year}`);
+    logger.warn(`Looking for months: ${previousCoachingPeriod.join(', ')} (normalized: ${normalizedPreviousCoachingPeriod.join(', ')}), Year: ${params.year}`);
     // Check if those months exist at all
     const availableMonths = [...new Set(allBehavioralCoaching
       .filter(r => {
