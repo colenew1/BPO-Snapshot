@@ -312,6 +312,39 @@ export async function processSnapshotData(params) {
   logger.info(`Filter breakdown - Client: ${clientMatches}, Org: ${orgMatches}, Metric: ${metricMatches}, Month: ${monthMatches}, Year: ${yearMatches}`);
   logger.info(`Final filtered count: ${currentCoaching.length}`);
   
+  // Log what months are actually available in the database for records that match other filters
+  if (currentCoaching.length === 0 && allBehavioralCoaching && allBehavioralCoaching.length > 0) {
+    const recordsMatchingOtherFilters = (allBehavioralCoaching || []).filter(item => {
+      const clientMatch = params.clients.includes(item.client);
+      const orgMatch = normalizeString(item.amplifai_org) === normalizeString(params.organization);
+      const amplifaiMetricMatch = normalizeString(item.amplifai_metric) === normalizedMetricName;
+      const metricFieldMatch = normalizeString(item.metric) === normalizedMetricName;
+      const metricMatch = amplifaiMetricMatch || metricFieldMatch;
+      const yearMatch = item.year === params.year;
+      return clientMatch && orgMatch && metricMatch && yearMatch;
+    });
+    
+    const availableMonths = [...new Set(recordsMatchingOtherFilters.map(r => r.month))];
+    logger.warn(`⚠️ No records found for months: ${currentCoachingPeriod.join(', ')}`);
+    logger.warn(`Available months in DB (for matching client/org/metric/year): ${availableMonths.join(', ')}`);
+    logger.warn(`Looking for months: ${currentCoachingPeriod.join(', ')} (normalized: ${normalizedCurrentCoachingPeriod.join(', ')})`);
+    
+    // Show sample records by month
+    availableMonths.slice(0, 5).forEach(month => {
+      const sample = recordsMatchingOtherFilters.find(r => r.month === month);
+      if (sample) {
+        logger.info(`Sample record for ${month}:`, {
+          client: sample.client,
+          amplifai_org: sample.amplifai_org,
+          amplifai_metric: sample.amplifai_metric,
+          metric: sample.metric,
+          month: sample.month,
+          year: sample.year
+        });
+      }
+    });
+  }
+  
   logger.info(`Current coaching period: ${currentCoachingPeriod.join(', ')}, found ${currentCoaching.length} records`);
   logger.info(`Normalized current coaching period: ${normalizedCurrentCoachingPeriod.join(', ')}`);
   
@@ -676,6 +709,22 @@ export async function processSnapshotData(params) {
     } : null
   });
   
+  // Get available months for records matching other filters (to help debug month mismatch)
+  const recordsMatchingOtherFilters = (allBehavioralCoaching || []).filter(item => {
+    const clientMatch = params.clients.includes(item.client);
+    const orgMatch = normalizeString(item.amplifai_org) === normalizeString(params.organization);
+    const amplifaiMetricMatch = normalizeString(item.amplifai_metric) === normalizedMetricName;
+    const metricFieldMatch = normalizeString(item.metric) === normalizedMetricName;
+    const metricMatch = amplifaiMetricMatch || metricFieldMatch;
+    const yearMatch = item.year === params.year;
+    return clientMatch && orgMatch && metricMatch && yearMatch;
+  });
+  const availableMonths = [...new Set(recordsMatchingOtherFilters.map(r => r.month))].sort();
+  const monthDistribution = {};
+  availableMonths.forEach(month => {
+    monthDistribution[month] = recordsMatchingOtherFilters.filter(r => r.month === month).length;
+  });
+  
   // Add debug info to response (always show for debugging)
   // Make sure variables are in scope - add it directly to result object
   result.debug_info = {
@@ -699,6 +748,9 @@ export async function processSnapshotData(params) {
     },
     current_coaching_records: currentCoaching.length,
     previous_coaching_records: previousCoaching.length,
+    available_months_in_db: availableMonths,
+    month_distribution: monthDistribution,
+    records_matching_other_filters: recordsMatchingOtherFilters.length,
     sample_db_record: allBehavioralCoaching && allBehavioralCoaching.length > 0 ? {
       client: allBehavioralCoaching[0].client,
       amplifai_org: allBehavioralCoaching[0].amplifai_org,
