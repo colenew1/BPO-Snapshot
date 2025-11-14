@@ -362,10 +362,11 @@
             margin-bottom: 15px;
             max-height: 600px;
             overflow-y: auto;
-            line-height: 1.6;
+            line-height: 1.8;
             white-space: pre-wrap;
             font-family: 'Georgia', serif;
             color: #333;
+            font-size: 1.05rem;
         }
         .case-study-actions {
             display: flex;
@@ -1336,108 +1337,87 @@
         
         let generatedCaseStudy = '';
         
-        function generateCaseStudy() {
+        async function generateCaseStudy() {
             if (!lastResponse) {
                 alert('No data available. Please generate a snapshot first.');
                 return;
             }
             
-            const data = lastResponse;
-            const metadata = data.snapshot_metadata || {};
-            const comparison = metadata.comparison || {};
-            const coaching = data.coaching_activity || {};
-            const currentBehaviors = coaching.current?.top_behaviors || [];
-            
-            // Build case study content
-            let caseStudy = '';
-            
-            // Title
-            caseStudy += `${metadata.organization} - ${metadata.metric} Performance Case Study\n`;
-            caseStudy += `${comparison.current_period} vs ${comparison.previous_period}\n`;
-            caseStudy += '='.repeat(60) + '\n\n';
-            
-            // Executive Summary
-            caseStudy += 'EXECUTIVE SUMMARY\n';
-            caseStudy += '-'.repeat(60) + '\n';
-            if (data.ai_summary) {
-                caseStudy += data.ai_summary + '\n\n';
-            } else {
-                caseStudy += `${metadata.metric} ${comparison.percent_change && comparison.percent_change.includes('-') ? 'declined' : 'improved'} by ${Math.abs(parseFloat(comparison.percent_change || 0)).toFixed(1)}% `;
-                caseStudy += `from ${comparison.previous_value} to ${comparison.current_value} between ${comparison.previous_period} and ${comparison.current_period}.\n\n`;
-            }
-            
-            // Performance Metrics
-            caseStudy += 'PERFORMANCE METRICS\n';
-            caseStudy += '-'.repeat(60) + '\n';
-            caseStudy += `Metric: ${metadata.metric}\n`;
-            caseStudy += `Current Period (${comparison.current_period}): ${comparison.current_value}\n`;
-            caseStudy += `Previous Period (${comparison.previous_period}): ${comparison.previous_value}\n`;
-            caseStudy += `Change: ${comparison.change} (${comparison.percent_change})\n`;
-            caseStudy += `Programs Analyzed: ${metadata.programs_count}\n`;
-            caseStudy += `Data Points: ${metadata.data_quality?.total_metric_data_points || 'N/A'}\n\n`;
-            
-            // Coaching Activity
-            caseStudy += 'COACHING ACTIVITY OVERVIEW\n';
-            caseStudy += '-'.repeat(60) + '\n';
-            caseStudy += `Current Period (${coaching.current?.period_label || comparison.current_period}):\n`;
-            caseStudy += `  • Total Coaching Sessions: ${coaching.current?.total_coaching_sessions || 0}\n`;
-            caseStudy += `  • Effectiveness: ${coaching.current?.coaching_effectiveness || 'N/A'}\n\n`;
-            caseStudy += `Previous Period (${coaching.previous?.period_label || comparison.previous_period}):\n`;
-            caseStudy += `  • Total Coaching Sessions: ${coaching.previous?.total_coaching_sessions || 0}\n`;
-            caseStudy += `  • Effectiveness: ${coaching.previous?.coaching_effectiveness || 'N/A'}\n\n`;
-            caseStudy += `Change: ${coaching.change?.coaching_volume_change || 0} sessions (${coaching.change?.coaching_volume_change_pct || 'N/A'})\n`;
-            caseStudy += `Effectiveness Change: ${coaching.change?.effectiveness_change || 'N/A'}\n\n`;
-            
-            // Top Coaching Behaviors
-            if (currentBehaviors.length > 0) {
-                caseStudy += 'TOP COACHING BEHAVIORS\n';
-                caseStudy += '-'.repeat(60) + '\n';
-                currentBehaviors.forEach((behavior, index) => {
-                    caseStudy += `${index + 1}. ${behavior.behavior}\n`;
-                    caseStudy += `   Sessions: ${behavior.sessions} (${behavior.percent_of_total} of total)\n`;
-                    if (behavior.sub_behaviors && behavior.sub_behaviors.length > 0) {
-                        caseStudy += `   Key Focus Areas:\n`;
-                        behavior.sub_behaviors.forEach(sub => {
-                            caseStudy += `     • ${sub.sub_behavior}: ${sub.sessions} sessions (${sub.percent_of_behavior})\n`;
-                        });
-                    }
-                    caseStudy += '\n';
-                });
-            }
-            
-            // Key Insights
-            caseStudy += 'KEY INSIGHTS\n';
-            caseStudy += '-'.repeat(60) + '\n';
-            if (comparison.percent_change && !comparison.percent_change.includes('-')) {
-                caseStudy += `• Strong performance improvement of ${comparison.percent_change} demonstrates effective coaching strategies.\n`;
-            }
-            if (coaching.current?.total_coaching_sessions > 0) {
-                const topBehavior = currentBehaviors[0];
-                if (topBehavior) {
-                    caseStudy += `• Primary focus on "${topBehavior.behavior}" with ${topBehavior.sessions} sessions (${topBehavior.percent_of_total}) indicates strategic prioritization.\n`;
-                }
-            }
-            if (coaching.change?.coaching_volume_change_pct && !coaching.change.coaching_volume_change_pct.includes('-')) {
-                caseStudy += `• Increased coaching activity (${coaching.change.coaching_volume_change_pct}) shows commitment to performance improvement.\n`;
-            }
-            caseStudy += `• Analysis based on ${metadata.data_quality?.total_coaching_records || 0} coaching records across ${metadata.programs_count} programs.\n\n`;
-            
-            // Footer
-            caseStudy += '='.repeat(60) + '\n';
-            caseStudy += `Generated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\n`;
-            caseStudy += `Client: ${metadata.clients}\n`;
-            caseStudy += `Organization: ${metadata.organization}\n`;
-            
-            // Store and display
-            generatedCaseStudy = caseStudy;
+            // Show loading state
             const caseStudyBox = document.getElementById('case-study-box');
             const caseStudyContent = document.getElementById('case-study-content');
+            const generateBtn = document.querySelector('.action-btn[onclick="generateCaseStudy()"]');
             
             if (caseStudyBox && caseStudyContent) {
-                caseStudyContent.textContent = caseStudy;
+                caseStudyContent.textContent = 'Generating case study...';
                 caseStudyBox.classList.add('visible');
-                // Scroll to case study box
-                caseStudyBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                if (generateBtn) {
+                    generateBtn.disabled = true;
+                    generateBtn.textContent = 'Generating...';
+                }
+            }
+            
+            try {
+                // Determine API URL
+                const apiUrl = window.location.hostname === 'localhost' 
+                    ? 'http://localhost:3000/api/case-study'
+                    : '/api/case-study';
+                
+                console.log('Generating case study via API:', apiUrl);
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        snapshotData: lastResponse
+                    })
+                }).catch(fetchError => {
+                    console.error('Fetch error details:', fetchError);
+                    throw new Error(`Network error: ${fetchError.message}. Please check if the API endpoint is accessible.`);
+                });
+                
+                if (!response.ok) {
+                    const contentType = response.headers.get('content-type') || '';
+                    let errorMessage = `HTTP error! status: ${response.status}`;
+                    
+                    if (contentType.includes('application/json')) {
+                        try {
+                            const errorData = await response.json();
+                            errorMessage = errorData.message || errorData.error || errorMessage;
+                        } catch (e) {
+                            // If JSON parsing fails, use default message
+                        }
+                    }
+                    
+                    throw new Error(errorMessage);
+                }
+                
+                const data = await response.json();
+                generatedCaseStudy = data.case_study || '';
+                
+                if (!generatedCaseStudy) {
+                    throw new Error('Case study generation returned empty result');
+                }
+                
+                // Display the case study
+                if (caseStudyBox && caseStudyContent) {
+                    caseStudyContent.textContent = generatedCaseStudy;
+                    caseStudyBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+                
+            } catch (error) {
+                console.error('Error generating case study:', error);
+                if (caseStudyContent) {
+                    caseStudyContent.textContent = `Error generating case study: ${error.message}`;
+                }
+                alert('Failed to generate case study: ' + error.message);
+            } finally {
+                if (generateBtn) {
+                    generateBtn.disabled = false;
+                    generateBtn.textContent = 'Generate Case Study';
+                }
             }
         }
         
