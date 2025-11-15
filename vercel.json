@@ -5,6 +5,9 @@
     },
     "api/snapshot.js": {
       "maxDuration": 60
+    },
+    "api/case-study.js": {
+      "maxDuration": 60
     }
   },
   "env": {

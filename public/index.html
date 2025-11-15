@@ -825,18 +825,35 @@
                 console.log('Making API request to:', apiUrl);
                 console.log('Request payload:', formData);
                 
-                // Make API call
+                // Make API call with timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+                
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(formData)
+                    body: JSON.stringify(formData),
+                    signal: controller.signal
                 }).catch(fetchError => {
+                    clearTimeout(timeoutId);
                     // Handle network errors (CORS, connection refused, etc.)
                     console.error('Fetch error details:', fetchError);
+                    
+                    if (fetchError.name === 'AbortError') {
+                        throw new Error('Request timed out. The API may be taking too long to respond.');
+                    }
+                    
+                    // More specific error messages
+                    if (fetchError.message.includes('Failed to fetch') || fetchError.message.includes('NetworkError')) {
+                        throw new Error(`Cannot reach API endpoint. Please check: 1) The deployment is live, 2) The endpoint /api/snapshot exists, 3) Your network connection. Error: ${fetchError.message}`);
+                    }
+                    
                     throw new Error(`Network error: ${fetchError.message}. Please check if the API endpoint is accessible.`);
                 });
+                
+                clearTimeout(timeoutId);
                 
                 if (!response.ok) {
                     // Check if response is JSON or HTML
