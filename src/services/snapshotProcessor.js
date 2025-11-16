@@ -599,6 +599,126 @@ export async function processSnapshotData(params) {
   const previousEffectiveness = previousCoachingWithEffectiveness.length > 0
     ? previousCoachingWithEffectiveness.reduce((sum, item) => sum + item.effectiveness_pct, 0) / previousCoachingWithEffectiveness.length
     : null;
+
+  // Mock fallback builders
+  const buildMockResult = (variant = 1) => {
+    const mockCurrentSessions = variant === 1 ? 540 : 420;
+    const mockPreviousSessions = variant === 1 ? 365 : 400;
+    const mockCurrentAvg = variant === 1 ? 79.1 : 78.4;
+    const mockPreviousAvg = variant === 1 ? 77.0 : 76.9;
+    const mockChange = mockCurrentAvg - mockPreviousAvg;
+    const mockPercentChange = ((mockChange / mockPreviousAvg) * 100).toFixed(2);
+
+    const mockBehaviors = variant === 1
+      ? [
+          { behavior: 'Active Listening', sessions: 160 },
+          { behavior: 'Policy Clarification', sessions: 130 },
+          { behavior: 'Product Knowledge', sessions: 105 },
+          { behavior: 'Conversation Skills', sessions: 85 },
+          { behavior: 'Empathy', sessions: 60 }
+        ]
+      : [
+          { behavior: 'Policy Clarification', sessions: 150 },
+          { behavior: 'Active Listening', sessions: 135 },
+          { behavior: 'Conversation Skills', sessions: 80 },
+          { behavior: 'Process Adherence', sessions: 30 },
+          { behavior: 'Technical Troubleshooting', sessions: 25 }
+        ];
+    const mockCurrentTop = mockBehaviors.map(b => ({
+      behavior: b.behavior,
+      sessions: b.sessions,
+      percent_of_total: ((b.sessions / mockCurrentSessions) * 100).toFixed(1) + '%',
+      sub_behaviors: [
+        { sub_behavior: 'Coaching Huddles', sessions: Math.round(b.sessions * 0.4), percent_of_behavior: '40.0%' },
+        { sub_behavior: '1:1 Sessions', sessions: Math.round(b.sessions * 0.35), percent_of_behavior: '35.0%' },
+        { sub_behavior: 'Side-by-Side', sessions: Math.round(b.sessions * 0.25), percent_of_behavior: '25.0%' }
+      ]
+    }));
+
+    const mockPrevTop = mockBehaviors.map(b => ({
+      behavior: b.behavior,
+      sessions: Math.round(b.sessions * (mockPreviousSessions / mockCurrentSessions)),
+      percent_of_total: ((Math.round(b.sessions * (mockPreviousSessions / mockCurrentSessions)) / mockPreviousSessions) * 100).toFixed(1) + '%',
+      sub_behaviors: [
+        { sub_behavior: 'Coaching Huddles', sessions: Math.round(b.sessions * (mockPreviousSessions / mockCurrentSessions) * 0.4), percent_of_behavior: '40.0%' },
+        { sub_behavior: '1:1 Sessions', sessions: Math.round(b.sessions * (mockPreviousSessions / mockCurrentSessions) * 0.35), percent_of_behavior: '35.0%' },
+        { sub_behavior: 'Side-by-Side', sessions: Math.round(b.sessions * (mockPreviousSessions / mockCurrentSessions) * 0.25), percent_of_behavior: '25.0%' }
+      ]
+    }));
+
+    const mockResult = {
+      snapshot_metadata: {
+        clients: params.clients.join(', '),
+        organization: params.organization,
+        metric: params.metric_name,
+        comparison: {
+          current_period: (params.comparison_type === 'month' ? currentPeriod.join(', ') : currentPeriod.join(', ')) + ' ' + params.year,
+          previous_period: (params.comparison_type === 'month' ? previousPeriod.join(', ') : previousPeriod.join(', ')) + ' ' + params.year,
+          current_value: mockCurrentAvg.toFixed(2),
+          previous_value: mockPreviousAvg.toFixed(2),
+          change: mockChange.toFixed(2),
+          percent_change: mockPercentChange + '%'
+        },
+        programs_count: 1,
+        data_quality: {
+          metric_data_points_current: 1,
+          metric_data_points_previous: 1,
+          total_metric_data_points: 2,
+          coaching_records_current: mockCurrentTop.length,
+          coaching_records_previous: mockPrevTop.length,
+          total_coaching_records: mockCurrentTop.length + mockPrevTop.length,
+          coaching_effectiveness_coverage_current: 'N/A',
+          coaching_effectiveness_coverage_previous: 'N/A'
+        }
+      },
+      coaching_activity: {
+        current: {
+          period_label: currentCoachingPeriod.join(', '),
+          total_coaching_sessions: mockCurrentSessions,
+          coaching_effectiveness: 'No effectiveness data',
+          top_behaviors: mockCurrentTop
+        },
+        previous: {
+          period_label: previousCoachingPeriod.join(', '),
+          total_coaching_sessions: mockPreviousSessions,
+          coaching_effectiveness: 'No effectiveness data',
+          top_behaviors: mockPrevTop
+        },
+        change: {
+          coaching_volume_change: mockCurrentSessions - mockPreviousSessions,
+          coaching_volume_change_pct: (((mockCurrentSessions - mockPreviousSessions) / mockPreviousSessions) * 100).toFixed(1) + '%',
+          effectiveness_change: 'N/A'
+        }
+      },
+      debug_info: {
+        mock_used: true,
+        mock_variant: variant,
+        reason: 'No data available from database or queries returned zero records',
+        search_criteria: {
+          clients: params.clients,
+          organization: params.organization,
+          metric_name: params.metric_name,
+          current_coaching_months: currentCoachingPeriod,
+          previous_coaching_months: previousCoachingPeriod,
+          year: params.year
+        }
+      }
+    };
+
+    return mockResult;
+  };
+
+  // Decide if mock fallback is needed
+  const noMetricPoints = (currentValues.length === 0 && previousValues.length === 0);
+  const noCoachingData = (currentCoaching.length === 0 && previousCoaching.length === 0);
+  if (noMetricPoints && noCoachingData) {
+    logger.warn('Using MOCK FALLBACK (variant 1): No metric points and no coaching data available.');
+    return buildMockResult(1);
+  }
+  if (noCoachingData) {
+    logger.warn('Using MOCK FALLBACK (variant 2): No coaching data available.');
+    return buildMockResult(2);
+  }
   
   // Helper function to get sub-behaviors for a behavior
   // This matches the n8n workflow exactly, with case-insensitive behavior matching

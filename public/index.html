@@ -1011,6 +1011,9 @@
                     <div class="ai-summary">
                         <div class="ai-summary-title">AI Analysis</div>
                         <div class="ai-summary-text">${data.ai_summary}</div>
+                        <div style="margin-top: 10px; color: #1e40af;">
+                            <strong>Coaching sessions (current):</strong> ${data.coaching_activity?.current?.total_coaching_sessions || 0}
+                        </div>
                     </div>
                 `;
             } else {
@@ -1047,6 +1050,9 @@
                     <div class="ai-summary">
                         <div class="ai-summary-title">AI Analysis</div>
                         <div class="ai-summary-text">${generatedSummary}</div>
+                        <div style="margin-top: 10px; color: #1e40af;">
+                            <strong>Coaching sessions (current):</strong> ${data.coaching_activity?.current?.total_coaching_sessions || 0}
+                        </div>
                     </div>
                 `;
             }
