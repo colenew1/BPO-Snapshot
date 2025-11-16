@@ -848,7 +848,9 @@ export async function processSnapshotData(params) {
       return {
         behavior: displayName, // Use canonical display name
         sessions: count,
-        percent_of_total: previousSessions > 0 ? ((count / previousSessions) * 100).toFixed(1) + '%' : 'N/A',
+        percent_of_total: previousSessions > 0
+          ? ((count / previousSessions) * 100).toFixed(1) + '%'
+          : (params?.comparison_type === 'quarter' ? '0%' : 'N/A'),
         sub_behaviors: getSubBehaviors(previousCoaching, displayName)
       };
     });
