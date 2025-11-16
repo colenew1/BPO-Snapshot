@@ -1057,7 +1057,7 @@
                 <div class="data-quality-badge">
                     <span><span class="emoji">📊</span> Based on ${dataQuality.total_metric_data_points || 'N/A'} ${data.snapshot_metadata?.metric} data points</span>
                     <span><span class="emoji">👥</span> ${data.snapshot_metadata?.programs_count} programs</span>
-                    <span><span class="emoji">🎯</span> ${dataQuality.total_coaching_records || data.coaching_activity?.current?.total_coaching_sessions} coaching records</span>
+                    <span><span class="emoji">🎯</span> ${((data.coaching_activity?.current?.total_coaching_sessions || 0) + (data.coaching_activity?.previous?.total_coaching_sessions || 0))} coaching sessions</span>
                 </div>
             `;
             
