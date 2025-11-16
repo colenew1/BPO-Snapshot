@@ -604,27 +604,19 @@
                         <label for="organization">Organization</label>
                         <select id="organization" class="form-control">
                             <option value="UHC">UHC</option>
-                            <option value="Anthem">Anthem</option>
-                            <option value="Cigna">Cigna</option>
-                            <option value="Aetna">Aetna</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label for="metric">Metric</label>
                         <select id="metric" class="form-control">
                             <option value="NPS">NPS</option>
-                            <option value="AHT">AHT</option>
-                            <option value="QA">QA</option>
-                            <option value="CSAT">CSAT</option>
-                            <option value="FCR">FCR</option>
-                            <option value="TRANSFER_RATE">Transfer Rate</option>
-                            <option value="ATTENDANCE">Attendance</option>
-                            <option value="RELEASE_RATE">Release Rate</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label for="year">Year</label>
-                        <input type="number" id="year" class="form-control" value="2025" min="2020" max="2030">
+                        <select id="year" class="form-control">
+                            <option value="2025" selected>2025</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>Comparison Type</label>
@@ -773,8 +765,16 @@
         }
         
         function handleClientCheckbox(event) {
+            // If the actual checkbox or its label was clicked, let the default behavior handle it
+            const targetTag = (event.target && event.target.tagName) ? event.target.tagName.toLowerCase() : '';
+            if (targetTag === 'input' || targetTag === 'label') {
+                return;
+            }
+            // Otherwise, toggle when clicking anywhere on the container
             const checkbox = event.currentTarget.querySelector('input[type="checkbox"]');
-            checkbox.checked = !checkbox.checked;
+            if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+            }
             handleClientSelection();
         }
         

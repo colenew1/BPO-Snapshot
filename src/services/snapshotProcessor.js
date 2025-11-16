@@ -8,6 +8,15 @@ import { logger } from '../utils/logger.js';
 export async function processSnapshotData(params) {
   logger.info('Processing snapshot data', params);
   
+  // Determine effective clients (supplement TP/TTEC with Alorica data)
+  const needsAloricaSupplement = Array.isArray(params.clients) && params.clients.some(c => c === 'TP' || c === 'TTEC');
+  const effectiveClients = needsAloricaSupplement
+    ? Array.from(new Set([...(params.clients || []), 'Alorica']))
+    : (params.clients || []);
+  if (needsAloricaSupplement) {
+    logger.info(`Supplementing client selection ${JSON.stringify(params.clients)} with 'Alorica' for data completeness. Effective clients: ${JSON.stringify(effectiveClients)}`);
+  }
+  
   // Determine periods
   let currentPeriod, previousPeriod;
   if (params.comparison_type === 'month') {
@@ -262,7 +271,7 @@ export async function processSnapshotData(params) {
   
   // Filter metrics for current period
   const currentMetrics = (allMonthlyMetrics || []).filter(item => {
-    return params.clients.includes(item.client) &&
+    return effectiveClients.includes(item.client) &&
            item.amplifai_org === params.organization &&
            item.amplifai_metric === params.metric_name &&
            currentPeriod.includes(item.month) &&
@@ -271,7 +280,7 @@ export async function processSnapshotData(params) {
   
   // Filter metrics for previous period
   const previousMetrics = (allMonthlyMetrics || []).filter(item => {
-    return params.clients.includes(item.client) &&
+    return effectiveClients.includes(item.client) &&
            item.amplifai_org === params.organization &&
            item.amplifai_metric === params.metric_name &&
            previousPeriod.includes(item.month) &&
@@ -321,7 +330,7 @@ export async function processSnapshotData(params) {
   let yearMatches = 0;
   
   const currentCoaching = (allBehavioralCoaching || []).filter(item => {
-    const clientMatch = params.clients.includes(item.client);
+    const clientMatch = effectiveClients.includes(item.client);
     if (clientMatch) clientMatches++;
     
     const orgMatch = normalizeString(item.amplifai_org) === normalizeString(params.organization);
@@ -364,7 +373,7 @@ export async function processSnapshotData(params) {
   // Log what months are actually available in the database for records that match other filters
   if (currentCoaching.length === 0 && allBehavioralCoaching && allBehavioralCoaching.length > 0) {
     const recordsMatchingOtherFilters = (allBehavioralCoaching || []).filter(item => {
-      const clientMatch = params.clients.includes(item.client);
+      const clientMatch = effectiveClients.includes(item.client);
       const orgMatch = normalizeString(item.amplifai_org) === normalizeString(params.organization);
       const amplifaiMetricMatch = normalizeString(item.amplifai_metric) === normalizedMetricName;
       const metricFieldMatch = normalizeString(item.metric) === normalizedMetricName;
@@ -452,7 +461,7 @@ export async function processSnapshotData(params) {
   const normalizedPreviousCoachingPeriod = previousCoachingPeriod.map(normalizeMonth);
   
   const previousCoaching = (allBehavioralCoaching || []).filter(item => {
-    const clientMatch = params.clients.includes(item.client);
+    const clientMatch = effectiveClients.includes(item.client);
     const orgMatch = normalizeString(item.amplifai_org) === normalizeString(params.organization);
     const yearMatch = item.year === params.year;
     
@@ -795,7 +804,7 @@ export async function processSnapshotData(params) {
   
   // Get available months for records matching other filters (to help debug month mismatch)
   const recordsMatchingOtherFilters = (allBehavioralCoaching || []).filter(item => {
-    const clientMatch = params.clients.includes(item.client);
+    const clientMatch = effectiveClients.includes(item.client);
     const orgMatch = normalizeString(item.amplifai_org) === normalizeString(params.organization);
     const amplifaiMetricMatch = normalizeString(item.amplifai_metric) === normalizedMetricName;
     const metricFieldMatch = normalizeString(item.metric) === normalizedMetricName;
