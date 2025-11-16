@@ -460,7 +460,7 @@ export async function processSnapshotData(params) {
   // Use same flexible matching as current period
   const normalizedPreviousCoachingPeriod = previousCoachingPeriod.map(normalizeMonth);
   
-  const previousCoaching = (allBehavioralCoaching || []).filter(item => {
+  let previousCoaching = (allBehavioralCoaching || []).filter(item => {
     const clientMatch = effectiveClients.includes(item.client);
     const orgMatch = normalizeString(item.amplifai_org) === normalizeString(params.organization);
     const yearMatch = item.year === params.year;
