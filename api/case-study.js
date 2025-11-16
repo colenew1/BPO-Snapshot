@@ -57,11 +57,41 @@ export default async function handler(req, res) {
     const coaching = snapshotData.coaching_activity || {};
     const currentBehaviors = coaching.current?.top_behaviors || [];
     const previousBehaviors = coaching.previous?.top_behaviors || [];
+
+    // Genericize client names everywhere (BPO 1/2/3)
+    const clientNameMap = {
+      'ALORICA': 'BPO 1',
+      'TP': 'BPO 2',
+      'TTEC': 'BPO 3'
+    };
+    const toGeneric = (name) => {
+      if (!name) return name;
+      const key = String(name).trim().toUpperCase();
+      return clientNameMap[key] || name;
+    };
+    const genericizeClientsField = (clientsValue) => {
+      if (!clientsValue) return clientsValue;
+      // Supports comma-separated list or single value
+      return String(clientsValue)
+        .split(',')
+        .map(c => toGeneric(c.trim()))
+        .join(', ');
+    };
+    const genericizeText = (text) => {
+      if (!text) return text;
+      // Replace whole-word, case-insensitive
+      return String(text)
+        .replace(/\bAlorica\b/gi, 'BPO 1')
+        .replace(/\bTP\b/g, 'BPO 2')
+        .replace(/\bTTEC\b/gi, 'BPO 3');
+    };
+
+    const genericClients = genericizeClientsField(metadata.clients);
     
     const prompt = `You are writing customer success case studies for contact center performance improvements. Write a direct, analytical case study (2-3 paragraphs) based on this data:
 
 ORGANIZATION: ${metadata.organization}
-CLIENT: ${metadata.clients}
+CLIENT: ${genericClients}
 METRIC: ${metadata.metric}
 
 PERFORMANCE RESULTS:
@@ -159,10 +189,13 @@ Output ONLY the case study text. No JSON, no markdown formatting, no headers, ju
       throw new Error('OpenAI returned empty response');
     }
     
+    // Final safety pass to enforce generic client naming in the output
+    const genericCaseStudy = genericizeText(caseStudy);
+    
     logger.info('Case study generated successfully');
     
     return res.status(200).json({
-      case_study: caseStudy,
+      case_study: genericCaseStudy,
       generated_at: new Date().toISOString()
     });
     
