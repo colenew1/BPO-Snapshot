@@ -87,12 +87,21 @@ export default async function handler(req, res) {
     };
 
     const genericClients = genericizeClientsField(metadata.clients);
-    
-    const prompt = `You are writing customer success case studies for contact center performance improvements. Write a direct, analytical case study (2-3 paragraphs) based on this data:
 
-ORGANIZATION: ${metadata.organization}
-CLIENT: ${genericClients}
-METRIC: ${metadata.metric}
+    // Frame from BPO perspective serving UHC
+    const isMultiBpo = (genericClients || '').includes(',');
+    const bpoNoun = isMultiBpo ? 'BPO partners' : 'BPO partner';
+    const bpoPronoun = isMultiBpo ? 'these partners' : 'this partner';
+
+    const prompt = `You are writing customer success case studies for contact center performance improvements.
+Write a direct, analytical case study (2-3 paragraphs) from the perspective of a ${bpoNoun} delivering services on behalf of UHC (the payer client).
+Do NOT frame the results as UHC's internal operations; explicitly attribute the work and improvements to the ${bpoNoun} serving UHC members/customers.
+Always use generic BPO names (BPO 1/2/3) and avoid real vendor names.
+
+CONTEXT:
+- End Client (Payer): ${metadata.organization}
+- ${bpoNoun}: ${genericClients}
+- Engagement: ${bpoPronoun} handle member/customer calls on behalf of UHC and are accountable for performance outcomes (e.g., ${metadata.metric}).
 
 PERFORMANCE RESULTS:
 - Current Period (${comparison.current_period}): ${comparison.current_value}
@@ -101,7 +110,7 @@ PERFORMANCE RESULTS:
 - Programs Analyzed: ${metadata.programs_count}
 - Total Data Points: ${metadata.data_quality?.total_metric_data_points || 'N/A'}
 
-COACHING ACTIVITY:
+COACHING ACTIVITY (delivered by the ${bpoNoun}):
 Current Period (${coaching.current?.period_label || comparison.current_period}):
 - Total Sessions: ${coaching.current?.total_coaching_sessions || 0}
 - Effectiveness: ${coaching.current?.coaching_effectiveness || 'N/A'}
@@ -115,22 +124,21 @@ Previous Period (${coaching.previous?.period_label || comparison.previous_period
 Change: ${coaching.change?.coaching_volume_change || 0} sessions (${coaching.change?.coaching_volume_change_pct || 'N/A'})
 Effectiveness Change: ${coaching.change?.effectiveness_change || 'N/A'}
 
-TOP COACHING BEHAVIORS (Current Period - these drove the current results):
+TOP COACHING BEHAVIORS (Current Period - delivered by the ${bpoNoun} that drove results for UHC):
 ${currentBehaviors.map((b, i) => `${i + 1}. ${b.behavior}: ${b.sessions} sessions (${b.percent_of_total} of total)`).join('\n')}
 
 TOP COACHING BEHAVIORS (Previous Period):
 ${previousBehaviors.map((b, i) => `${i + 1}. ${b.behavior}: ${b.sessions} sessions (${b.percent_of_total} of total)`).join('\n')}
 
-CRITICAL CONTEXT - COACHING TIMING:
-- The coaching data shown is from the PREVIOUS period because coaching drives FUTURE performance
-- Example: If performance improved in July, the June coaching sessions drove that improvement
-- The "current period" coaching behaviors listed above are what drove the "current period" performance results
+CRITICAL TIMING CONTEXT:
+- Coaching is from the PREVIOUS period and drives the following period's performance (e.g., June coaching → July performance).
+- The "current period" coaching behaviors listed above are what drove the "current period" performance results.
 
 ## WRITING GUIDELINES:
 
 ### Structure: Problem → Solution → Results
-1. Start with the customer pain point (what was broken from the customer's perspective before the coaching period)
-2. Explain what coaching behaviors were targeted and why those specific behaviors solve that problem
+1. Start with the member/customer pain point from UHC's perspective (what was broken before the coaching period)
+2. Explain what the ${bpoNoun} targeted and why those behaviors solve that problem for UHC members/customers
 3. Show the measurable results with context
 
 ### Tone:
@@ -140,8 +148,8 @@ CRITICAL CONTEXT - COACHING TIMING:
 - Ground every claim in data or clear reasoning
 
 ### What to Include:
-- Customer experience before and after (not just internal metrics)
-- Why the specific coaching behaviors drove the specific results
+- Impact for UHC members/customers before and after (not just internal metrics)
+- Why the specific coaching behaviors drove the specific results for UHC
 - Context for numbers (is ${comparison.current_value} ${metadata.metric} good? Compared to what?)
 - How many programs/agents were involved (${metadata.programs_count} programs)
 - What changed from the customer's perspective
@@ -162,7 +170,7 @@ CRITICAL CONTEXT - COACHING TIMING:
 
 ### Example of Good vs Bad:
 ❌ BAD: "In an impressive demonstration of strategic focus, the team achieved commendable results through comprehensive coaching efforts."
-✅ GOOD: "${metadata.organization}'s ${metadata.metric} jumped from ${comparison.previous_value} to ${comparison.current_value} in one month. The driver: ${currentBehaviors[0]?.sessions || 0} coaching sessions teaching agents to ${currentBehaviors[0]?.behavior || 'address key behaviors'}, reducing customer frustration caused by [specific issue]."
+✅ GOOD: "For ${metadata.organization}, ${genericClients} improved ${metadata.metric} from ${comparison.previous_value} to ${comparison.current_value} in one month. The driver: ${currentBehaviors[0]?.sessions || 0} coaching sessions teaching agents to ${currentBehaviors[0]?.behavior || 'address key behaviors'}, reducing member frustration caused by [specific issue]."
 
 OUTPUT FORMAT:
 Output ONLY the case study text. No JSON, no markdown formatting, no headers, just the case study content as plain text. Write 2-3 paragraphs following the Problem → Solution → Results structure.`;
