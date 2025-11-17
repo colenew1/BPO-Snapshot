@@ -35,3 +35,6 @@ build/
 coverage/
 .nyc_output/
 
+# Data files (may contain sensitive information)
+data/
+
